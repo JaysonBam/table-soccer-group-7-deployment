@@ -6,7 +6,7 @@ import { TEAM_CONFIG, TEAM_SIDES } from "./types.ts";
 export const SERVER_HOST = process.env.HOST ?? "0.0.0.0";
 export const SERVER_PORT = Number(process.env.PORT ?? 3000);
 export const TEAM_PLAYER_LIMIT = {
-  min: 6,
+  min: 3,
   max: 10
 } as const;
 export const MAX_LOBBY_PLAYERS = TEAM_PLAYER_LIMIT.max * TEAM_SIDES.length;

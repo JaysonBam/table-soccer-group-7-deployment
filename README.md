@@ -43,18 +43,6 @@ The frontend runs on `http://127.0.0.1:5173`. When testing on phones, open the V
 http://127.0.0.1:5173/#/lobby
 ```
 
-## Motion Controls
-
-Motion controls are enabled from the pitch screen with the `Enable motion controls` button. The browser permission prompt is only requested after a direct tap or click on that button.
-
-Manual checks:
-
-1. iPhone Safari over HTTPS: open a live game, tap `Enable motion controls`, accept the prompt, and confirm the highlighted player follows device tilt.
-2. Android Chrome over HTTPS: tap the button and confirm the sensors start without errors or a permission dead-end.
-3. Desktop browser: confirm the button reports motion as unavailable and the swipe or drag controls still work.
-4. Denied permission: deny the prompt once, confirm the fallback message appears, then reload and verify the page lets you retry.
-5. No sensor events: if permission is granted but no device events arrive within a few seconds, confirm the UI shows the timeout message and fallback controls still work.
-
 ## Backend structure
 
 - `BackEnd/src/api`: HTTP route handling

@@ -3,6 +3,7 @@ import { createLobby, joinLobby } from "./api";
 import { connectLobbySocket, type LobbySocketConnection } from "./lobbySocket";
 import { saveStoredClientName } from "./storage";
 import { createHomeView } from "./views/homeView";
+import { renderGyroTestView } from "./views/gyroTestView";
 import { renderPitchView } from "./views/pitchView";
 import { createWaitingRoomView } from "./views/waitingRoomView";
 import type {
@@ -18,14 +19,15 @@ import type {
 } from "./types";
 
 const LOBBY_ROUTE = "lobby";
-type ScreenName = "pitch" | "lobby" | "waiting";
+const GYRO_TEST_ROUTE = "gyro-test";
+type ScreenName = "pitch" | "lobby" | "waiting" | "gyroTest";
 
 let currentLobby: Lobby | null = null;
 let currentPerson: ClientPerson | null = null;
 let currentLobbySocket: LobbySocketConnection | null = null;
 let currentPositions: Record<string, number> = {};
 let currentBallState: BallMovementState | null = null;
-let currentView: "preview" | "home" | "waiting" | "game" = "preview";
+let currentView: "preview" | "home" | "waiting" | "game" | "gyroTest" = "preview";
 let cleanupCurrentPage: (() => void) | null = null;
 let updateGamePosition: ((playerId: string, position: number) => void) | null = null;
 let updateGameCheer: ((team: FoosballTeam) => void) | null = null;
@@ -37,10 +39,12 @@ const app = document.querySelector<HTMLElement>("#app")!;
 const pitchScreen = app.querySelector<HTMLElement>("#pitch-screen")!;
 const lobbyScreen = app.querySelector<HTMLElement>("#lobby-screen")!;
 const waitingScreen = app.querySelector<HTMLElement>("#waiting-screen")!;
+const gyroTestScreen = app.querySelector<HTMLElement>("#gyro-test-screen")!;
 const screens: Record<ScreenName, HTMLElement> = {
   pitch: pitchScreen,
   lobby: lobbyScreen,
-  waiting: waitingScreen
+  waiting: waitingScreen,
+  gyroTest: gyroTestScreen
 };
 const homeView = createHomeView(lobbyScreen, {
   onCreate: handleCreateLobby,
@@ -54,12 +58,30 @@ window.addEventListener("hashchange", showCurrentRoute);
 showCurrentRoute();
 
 function showCurrentRoute(): void {
+  if (getCurrentPathRoute() === GYRO_TEST_ROUTE) {
+    showGyroTestView();
+    return;
+  }
+
   if (getCurrentRoute() === LOBBY_ROUTE) {
     showHomeView();
     return;
   }
 
   showPitchPreview();
+}
+
+function showGyroTestView(): void {
+  currentView = "gyroTest";
+  currentLobby = null;
+  currentPerson = null;
+  currentPositions = {};
+  currentBallState = null;
+  closeLobbySocket();
+  cleanupRenderedPage();
+  showScreen("gyroTest");
+
+  cleanupCurrentPage = renderGyroTestView(gyroTestScreen);
 }
 
 function showPitchPreview(): void {
@@ -239,11 +261,19 @@ function handleSocketPositions(positions: Record<string, number>): void {
   currentPositions = positions;
 
   for (const [playerId, position] of Object.entries(positions)) {
+    if (playerId === currentPerson?.id) {
+      continue;
+    }
+
     updateGamePosition?.(playerId, position);
   }
 }
 
 function handleSocketPosition(playerId: string, position: number): void {
+  if (playerId === currentPerson?.id) {
+    return;
+  }
+
   currentPositions = {
     ...currentPositions,
     [playerId]: position
@@ -349,6 +379,10 @@ function getErrorMessage(error: unknown): string {
 
 function getCurrentRoute(): string {
   return window.location.hash.replace(/^#\/?/, "").toLowerCase();
+}
+
+function getCurrentPathRoute(): string {
+  return window.location.pathname.replace(/^\/+|\/+$/g, "").toLowerCase();
 }
 
 function openLobbyRoute(): void {

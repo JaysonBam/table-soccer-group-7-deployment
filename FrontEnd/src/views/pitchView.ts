@@ -1,11 +1,4 @@
-import {
-  getMotionControlSupport,
-  initGyroControlWithActivity,
-  initKeyboardFallback,
-  requestGyroPermission,
-  stopGyroControl,
-  type MotionControlSupport
-} from "../game/gyro-control";
+import { canUseGyroControl, initGyroControl, initKeyboardFallback, needsGyroPermission, stopGyroControl } from "../game/gyro-control";
 import type {
   AssignedFoosballPlayer,
   BallMovementState,
@@ -58,15 +51,12 @@ type DragPointerState = {
   animationFrame: number;
 };
 
-type MotionControlState = "idle" | "requesting" | "granted" | "denied" | "unsupported" | "error";
-
 const PLAYER_X_RANGE_PERCENT = 38;
 const MAX_AUTONOMOUS_X = 0.9;
 const CHEER_BURST_DURATION_MS = 900;
 const MIN_KICK_SWIPE_DISTANCE = 24;
 const POSITION_SEND_INTERVAL_MS = 50;
 const POSITION_SEND_EPSILON = 0.015;
-const MOTION_ACTIVITY_TIMEOUT_MS = 4500;
 
 export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers = {}): () => void {
   const listenerController = new AbortController();
@@ -112,10 +102,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   let matchFinished = matchState?.status === "finished";
   let team1CheerCount = 0;
   let team2CheerCount = 0;
-  let motionState: MotionControlState = "idle";
-  let motionSupport: MotionControlSupport = getMotionControlSupport();
-  let motionActivityTimeout: number | undefined;
-  let motionActivityReceived = false;
   const isSpectator = handlers.currentPerson?.type === "spectator";
   const isTeam2View = handlers.currentPerson?.type === "team2Player";
 
@@ -152,9 +138,8 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   const markerByPlayerId = new Map(markers.flatMap((marker) => marker.playerId ? [[marker.playerId, marker.element] as const] : []));
 
   controlledMarker = markers.find((marker) => marker.isControlled) ?? null;
-  motionSupport = getMotionControlSupport();
-  motionState = getInitialMotionState();
-  applyMotionUiState();
+  motionButton.hidden = !controlledMarker || (!canUseGyroControl() && window.isSecureContext);
+  motionButton.textContent = needsGyroPermission() ? "Enable motion" : "Start motion";
   handlers.onPositionUpdater?.((playerId, position) => {
     const marker = markerByPlayerId.get(playerId);
 
@@ -176,10 +161,13 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
 
   const stopKeyboardFallback = controlledMarker ? initKeyboardFallback(updateScreenAxisPlayerPosition) : () => undefined;
 
+  if (controlledMarker && !needsGyroPermission()) {
+    void startGyro();
+  }
+
   return () => {
     listenerController.abort();
     stopTimer();
-    stopMotionActivityTimeout();
     handlers.onPositionUpdater?.(null);
     handlers.onCheerUpdater?.(null);
     handlers.onBallStateUpdater?.(null);
@@ -318,51 +306,15 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       return;
     }
 
-    motionSupport = getMotionControlSupport();
-
-    if (!motionSupport.secureContext) {
-      motionState = "unsupported";
-      applyMotionUiState();
-      showControlStatus(getMotionFailureMessage("insecure-context"));
-      return;
-    }
-
-    if (!motionSupport.supported) {
-      motionState = "unsupported";
-      applyMotionUiState();
-      showControlStatus(getMotionFailureMessage("unsupported"));
-      return;
-    }
-
-    motionState = "requesting";
-    applyMotionUiState();
-
-    if (motionSupport.requiresPermission) {
-      const permissionResult = await requestGyroPermission();
-
-      if (!permissionResult.granted) {
-        motionState = permissionResult.reason === "permission-denied" ? "denied" : "error";
-        applyMotionUiState();
-        showControlStatus(getMotionFailureMessage(permissionResult.reason));
-        return;
-      }
-    }
-
-    const motionResult = await initGyroControlWithActivity(updateScreenAxisPlayerPosition, handleMotionActivity);
+    const motionResult = await initGyroControl(updateScreenAxisPlayerPosition);
 
     if (motionResult.started) {
-      motionState = "granted";
-      applyMotionUiState();
-      startMotionActivityTimeout();
+      motionButton.hidden = true;
+      controlStatus.hidden = true;
+      controlStatus.textContent = "";
       return;
     }
 
-    motionState = motionResult.reason === "permission-denied"
-      ? "denied"
-      : motionResult.reason === "timeout"
-        ? "error"
-        : "unsupported";
-    applyMotionUiState();
     showControlStatus(getMotionFailureMessage(motionResult.reason));
   }
 
@@ -390,95 +342,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   function showControlStatus(message: string): void {
     controlStatus.textContent = message;
     controlStatus.hidden = false;
-  }
-
-  function applyMotionUiState(): void {
-    if (!controlledMarker) {
-      motionButton.hidden = true;
-      controlStatus.hidden = true;
-      return;
-    }
-
-    if (motionState === "granted") {
-      motionButton.hidden = true;
-      controlStatus.hidden = true;
-      controlStatus.textContent = "";
-      return;
-    }
-
-    motionButton.hidden = false;
-    motionButton.disabled = motionState === "requesting" || motionState === "unsupported";
-
-    if (motionState === "requesting") {
-      motionButton.textContent = motionSupport.requiresPermission ? "Requesting motion access…" : "Starting motion…";
-      showControlStatus("Requesting motion access from the browser.");
-      return;
-    }
-
-    if (motionState === "denied") {
-      motionButton.textContent = "Motion denied";
-      return;
-    }
-
-    if (motionState === "unsupported") {
-      motionButton.textContent = "Motion unavailable";
-      showControlStatus(getMotionFailureMessage(motionSupport.reason ?? "unsupported"));
-      return;
-    }
-
-    if (motionState === "error") {
-      motionButton.textContent = "Retry motion";
-      return;
-    }
-
-    motionButton.textContent = motionSupport.requiresPermission ? "Enable motion controls" : "Start motion controls";
-    controlStatus.hidden = true;
-    controlStatus.textContent = "";
-  }
-
-  function getInitialMotionState(): MotionControlState {
-    if (!controlledMarker) {
-      return "unsupported";
-    }
-
-    if (!motionSupport.secureContext || !motionSupport.supported) {
-      return "unsupported";
-    }
-
-    return "idle";
-  }
-
-  function startMotionActivityTimeout(): void {
-    stopMotionActivityTimeout();
-    motionActivityReceived = false;
-    motionActivityTimeout = window.setTimeout(() => {
-      if (motionActivityReceived) {
-        return;
-      }
-
-      motionState = "error";
-      stopGyroControl();
-      applyMotionUiState();
-      showControlStatus("Motion permission was granted, but no sensor events arrived. Check HTTPS, browser policy, or iframe permissions.");
-    }, MOTION_ACTIVITY_TIMEOUT_MS);
-  }
-
-  function stopMotionActivityTimeout(): void {
-    if (motionActivityTimeout !== undefined) {
-      window.clearTimeout(motionActivityTimeout);
-      motionActivityTimeout = undefined;
-    }
-  }
-
-  function handleMotionActivity(): void {
-    if (motionActivityReceived) {
-      return;
-    }
-
-    motionActivityReceived = true;
-    stopMotionActivityTimeout();
-    motionState = "granted";
-    applyMotionUiState();
   }
 
   function handleKickPointerDown(event: PointerEvent): void {
@@ -896,7 +759,7 @@ function getVectorLength(vector: Vector2D): number {
   return Math.sqrt(vector.x * vector.x + vector.y * vector.y);
 }
 
-function getMotionFailureMessage(reason: "unsupported" | "permission-denied" | "permission-error" | "insecure-context" | "timeout"): string {
+function getMotionFailureMessage(reason: "unsupported" | "permission-denied" | "permission-error" | "insecure-context"): string {
   if (reason === "insecure-context") {
     return "Motion is blocked on this network URL. Drag your highlighted player, or use HTTPS for tilt.";
   }
@@ -905,7 +768,7 @@ function getMotionFailureMessage(reason: "unsupported" | "permission-denied" | "
     return "Motion permission was denied. Drag your highlighted player to move.";
   }
 
-  if (reason === "permission-error" || reason === "timeout") {
+  if (reason === "permission-error") {
     return "Motion could not start. Drag your highlighted player to move.";
   }
 
