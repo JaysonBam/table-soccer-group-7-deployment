@@ -9,6 +9,15 @@ interface DeviceMotionPermissionEvent {
 }
 
 export type TiltCallback = (tilt: number) => void;
+export type GyroPermissionResult =
+  | {
+      granted: true;
+    }
+  | {
+      granted: false;
+      reason: "permission-denied" | "permission-error";
+    };
+
 export type GyroStartResult =
   | {
       started: true;
@@ -37,6 +46,32 @@ export function canUseGyroControl(): boolean {
   return typeof DeviceOrientationEvent !== "undefined" || needsGyroPermission();
 }
 
+export async function requestGyroPermission(): Promise<GyroPermissionResult> {
+  const permissionEvent = getMotionPermissionEvent();
+
+  if (!permissionEvent) {
+    return { granted: true };
+  }
+
+  try {
+    const result = await permissionEvent.requestPermission!();
+
+    if (result !== "granted") {
+      return {
+        granted: false,
+        reason: "permission-denied"
+      };
+    }
+
+    return { granted: true };
+  } catch {
+    return {
+      granted: false,
+      reason: "permission-error"
+    };
+  }
+}
+
 export async function initGyroControl(onUpdateCallback: TiltCallback): Promise<GyroStartResult> {
   onUpdate = onUpdateCallback;
 
@@ -45,26 +80,6 @@ export async function initGyroControl(onUpdateCallback: TiltCallback): Promise<G
       started: false,
       reason: window.isSecureContext ? "unsupported" : "insecure-context"
     };
-  }
-
-  const permissionEvent = getMotionPermissionEvent();
-
-  if (permissionEvent) {
-    try {
-      const result = await permissionEvent.requestPermission!();
-
-      if (result !== "granted") {
-        return {
-          started: false,
-          reason: "permission-denied"
-        };
-      }
-    } catch {
-      return {
-        started: false,
-        reason: "permission-error"
-      };
-    }
   }
 
   if (typeof DeviceOrientationEvent === "undefined") {
@@ -141,20 +156,20 @@ function handleOrientation(event: DeviceOrientationEvent): void {
 }
 
 function getMotionPermissionEvent(): DeviceMotionPermissionEvent | null {
-  if (typeof DeviceOrientationEvent !== "undefined") {
-    const DeviceOrientationEventClass = DeviceOrientationEvent as unknown as DeviceMotionPermissionEvent;
+  const DeviceOrientationEventClass = typeof DeviceOrientationEvent !== "undefined"
+    ? (DeviceOrientationEvent as unknown as DeviceMotionPermissionEvent)
+    : null;
 
-    if (typeof DeviceOrientationEventClass.requestPermission === "function") {
-      return DeviceOrientationEventClass;
-    }
+  if (DeviceOrientationEventClass && typeof DeviceOrientationEventClass.requestPermission === "function") {
+    return DeviceOrientationEventClass;
   }
 
-  if (typeof DeviceMotionEvent !== "undefined") {
-    const DeviceMotionEventClass = DeviceMotionEvent as unknown as DeviceMotionPermissionEvent;
+  const DeviceMotionEventClass = typeof DeviceMotionEvent !== "undefined"
+    ? (DeviceMotionEvent as unknown as DeviceMotionPermissionEvent)
+    : null;
 
-    if (typeof DeviceMotionEventClass.requestPermission === "function") {
-      return DeviceMotionEventClass;
-    }
+  if (DeviceMotionEventClass && typeof DeviceMotionEventClass.requestPermission === "function") {
+    return DeviceMotionEventClass;
   }
 
   return null;

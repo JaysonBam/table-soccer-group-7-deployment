@@ -1,4 +1,4 @@
-import { canUseGyroControl, initGyroControl, initKeyboardFallback, needsGyroPermission, stopGyroControl } from "../game/gyro-control";
+import { canUseGyroControl, initGyroControl, initKeyboardFallback, needsGyroPermission, requestGyroPermission, stopGyroControl } from "../game/gyro-control";
 import type {
   AssignedFoosballPlayer,
   BallMovementState,
@@ -304,6 +304,15 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   async function startGyro(): Promise<void> {
     if (!controlledMarker) {
       return;
+    }
+
+    if (needsGyroPermission()) {
+      const permissionResult = await requestGyroPermission();
+
+      if (!permissionResult.granted) {
+        showControlStatus(getMotionFailureMessage(permissionResult.reason));
+        return;
+      }
     }
 
     const motionResult = await initGyroControl(updateScreenAxisPlayerPosition);
