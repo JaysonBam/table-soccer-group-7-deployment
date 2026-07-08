@@ -92,6 +92,7 @@ export type ServerSocketMessage =
   | { type: "position"; playerId: string; position: number }
   | { type: "cheer"; team: PlayerTeam }
   | { type: "ballState"; ball: BallMovementState }
+  | { type: "goal"; scoringTeam: TeamSide }
   | { type: "error"; message: string };
 
 export type Vector2D = {
@@ -99,7 +100,7 @@ export type Vector2D = {
   y: number;
 };
 
-export type BallMovementReason = "spawn" | "wall-bounce" | "round-reset" | "kick" | "resync";
+export type BallMovementReason = "spawn" | "wall-bounce" | "round-reset" | "kick" | "resync" | "kickoff-pause";
 
 export type BallFieldDimensions = {
   width: number;

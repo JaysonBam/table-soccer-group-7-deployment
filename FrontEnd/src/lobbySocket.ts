@@ -1,5 +1,5 @@
 import { FALLBACK_WS_URL, WS_URL } from "./config";
-import type { BallMovementState, FoosballTeam, KickRequest, Lobby } from "./types";
+import type { BallMovementState, FoosballTeam, KickRequest, Lobby, TeamSide } from "./types";
 
 type LobbySocketMessage =
   | {
@@ -22,6 +22,10 @@ type LobbySocketMessage =
   | {
       type: "ballState";
       ball: BallMovementState;
+    }
+  | {
+      type: "goal";
+      scoringTeam: TeamSide;
     }
   | {
       type: "error";
@@ -55,6 +59,7 @@ type LobbySocketHandlers = {
   onPosition: (playerId: string, position: number) => void;
   onCheer: (team: FoosballTeam) => void;
   onBallState: (ball: BallMovementState) => void;
+  onGoal: (scoringTeam: TeamSide) => void;
   onError: (message: string) => void;
 };
 
@@ -191,6 +196,9 @@ function handleSocketMessage(message: LobbySocketMessage, handlers: LobbySocketH
       break;
     case "ballState":
       handlers.onBallState(message.ball);
+      break;
+    case "goal":
+      handlers.onGoal(message.scoringTeam);
       break;
     case "error":
       handlers.onError(message.message);

@@ -18,14 +18,11 @@ export type GyroStartResult =
       reason: "unsupported" | "permission-denied" | "permission-error" | "insecure-context";
     };
 
-const SMOOTHING = 0.1;
+const SMOOTHING = 0.18;
 const GAMMA_RANGE = 30;
-const TILT_DEADBAND = 0.025;
-const EMIT_EPSILON = 0.008;
 
 let rawGamma = 0;
 let smoothGamma = 0;
-let lastEmittedTilt = 0;
 let onUpdate: TiltCallback | null = null;
 let isListening = false;
 
@@ -86,7 +83,6 @@ export function stopGyroControl(): void {
 
   rawGamma = 0;
   smoothGamma = 0;
-  lastEmittedTilt = 0;
   onUpdate = null;
 }
 
@@ -130,14 +126,7 @@ function handleOrientation(event: DeviceOrientationEvent): void {
   const targetGamma = Math.max(-1, Math.min(1, rawGamma / GAMMA_RANGE));
 
   smoothGamma += (targetGamma - smoothGamma) * SMOOTHING;
-  const tilt = Math.abs(smoothGamma) < TILT_DEADBAND ? 0 : smoothGamma;
-
-  if (Math.abs(tilt - lastEmittedTilt) < EMIT_EPSILON) {
-    return;
-  }
-
-  lastEmittedTilt = tilt;
-  onUpdate?.(tilt);
+  onUpdate?.(smoothGamma);
 }
 
 function getMotionPermissionEvents(): Required<DeviceMotionPermissionEvent>[] {

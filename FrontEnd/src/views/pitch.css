@@ -13,9 +13,11 @@
   line-height: 1.5;
   font-weight: 400;
   color: #f5f7fb;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.12), transparent 26%),
-    linear-gradient(180deg, #07111b 0%, #0a1d18 52%, #050b10 100%);
+    background: linear-gradient(
+    to bottom,
+    var(--color-sky),
+    var(--color-sky-light)
+  );
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -602,12 +604,32 @@
   box-shadow: 0 14px 24px rgba(15, 23, 42, 0.25);
   opacity: 0;
   transform: translate(-50%, -10px);
-  transition: opacity 5000ms ease, transform 500ms ease;
+  transition: opacity 300ms ease, transform 300ms ease;
 }
 
 .pitch-page .goal-flash.is-visible {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+.pitch-page .kickoff-countdown {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 21;
+  margin: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  font-size: clamp(56px, 12vw, 120px);
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.pitch-page .kickoff-countdown.is-visible {
+  opacity: 1;
 }
 
 @media (orientation: portrait) and (max-width: 900px) {

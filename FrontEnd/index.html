@@ -61,6 +61,7 @@
             </div>
 
             <p class="goal-flash" data-goal-flash>Goal</p>
+            <p class="kickoff-countdown" data-kickoff-countdown></p>
 
             <p class="match-status">
               <span class="match-status-pill">
@@ -82,34 +83,36 @@
       </section>
 
       <section id="lobby-screen" class="page page-narrow" hidden>
-        <header class="page-header">
-          <h1>Table Soccer</h1>
-          <p class="muted" data-greeting hidden></p>
-        </header>
+        <div class="lobby-card">
+          <header class="page-header">
+            <h1>Table Soccer</h1>
+            <p class="muted" data-greeting hidden></p>
+          </header>
 
-        <form class="form-stack" data-name-form novalidate>
-          <label class="field" for="person-name-input">
-            Name
-            <input
-              id="person-name-input"
-              name="personName"
-              type="text"
-              autocomplete="name"
-              placeholder="Your name"
-              minlength="2"
-              maxlength="24"
-              required
-            />
-          </label>
-          <button class="button primary" type="submit">Continue</button>
-        </form>
+          <form class="form-stack" data-name-form novalidate>
+            <label class="field" for="person-name-input">
+              Name
+              <input
+                id="person-name-input"
+                name="personName"
+                type="text"
+                autocomplete="name"
+                placeholder="Your name"
+                minlength="2"
+                maxlength="24"
+                required
+              />
+            </label>
+            <button class="button primary" type="submit">Continue</button>
+          </form>
 
-        <nav class="main-actions" data-lobby-actions hidden aria-label="Lobby actions">
-          <button class="button primary" type="button" data-open-join-dialog>Join game</button>
-          <button class="button secondary" type="button" data-open-create-dialog>Create game</button>
-        </nav>
+          <nav class="main-actions" data-lobby-actions hidden aria-label="Lobby actions">
+            <button class="button primary" type="button" data-open-join-dialog>Join game</button>
+            <button class="button secondary" type="button" data-open-create-dialog>Create game</button>
+          </nav>
 
-        <p class="status-message" data-home-status-message aria-live="polite"></p>
+          <p class="status-message" data-home-status-message aria-live="polite"></p>
+        </div>
 
         <dialog class="modal" data-join-dialog>
           <button type="button" class="modal-close" data-close-dialog aria-label="Close">x</button>
@@ -170,8 +173,6 @@
           </form>
         </dialog>
       </section>
-
-      <section id="gyro-test-screen" class="page page-narrow" hidden></section>
 
       <section id="waiting-screen" class="page" hidden>
         <header class="page-header">

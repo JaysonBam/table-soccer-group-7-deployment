@@ -35,12 +35,21 @@ const MIN_DIRECTION_COMPONENT = 0.28;
 const CENTER_SPAWN_JITTER = 0.06;
 const COLLISION_EPSILON = 0.001;
 
-export function createInitialBallMovementState(sequence: number): BallMovementState {
-  return createSpawnBallMovementState(sequence, "spawn", Date.now());
-}
-
 export function createRoundResetBallMovementState(sequence: number, timestamp = Date.now()): BallMovementState {
   return createSpawnBallMovementState(sequence, "round-reset", timestamp);
+}
+
+export function createKickoffPauseBallMovementState(sequence: number, timestamp = Date.now()): BallMovementState {
+  return {
+    sequence,
+    reason: "kickoff-pause",
+    startPosition: createCenterSpawnPosition(SOCCER_FIELD, SOCCER_BALL_RADIUS),
+    velocity: { x: 0, y: 0 },
+    friction: 0,
+    serverTimestamp: timestamp,
+    radius: SOCCER_BALL_RADIUS,
+    field: SOCCER_FIELD
+  };
 }
 
 export function createKickBallMovementState(

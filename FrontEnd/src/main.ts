@@ -3,7 +3,6 @@ import { createLobby, joinLobby } from "./api";
 import { connectLobbySocket, type LobbySocketConnection } from "./lobbySocket";
 import { saveStoredClientName } from "./storage";
 import { createHomeView } from "./views/homeView";
-import { renderGyroTestView } from "./views/gyroTestView";
 import { renderPitchView } from "./views/pitchView";
 import { createWaitingRoomView } from "./views/waitingRoomView";
 import type {
@@ -15,36 +14,35 @@ import type {
   KickRequest,
   Lobby,
   LobbyRequest,
-  PersonType
+  PersonType,
+  TeamSide
 } from "./types";
 
 const LOBBY_ROUTE = "lobby";
-const GYRO_TEST_ROUTE = "gyro-test";
-type ScreenName = "pitch" | "lobby" | "waiting" | "gyroTest";
+type ScreenName = "pitch" | "lobby" | "waiting";
 
 let currentLobby: Lobby | null = null;
 let currentPerson: ClientPerson | null = null;
 let currentLobbySocket: LobbySocketConnection | null = null;
 let currentPositions: Record<string, number> = {};
 let currentBallState: BallMovementState | null = null;
-let currentView: "preview" | "home" | "waiting" | "game" | "gyroTest" = "preview";
+let currentView: "preview" | "home" | "waiting" | "game" = "preview";
 let cleanupCurrentPage: (() => void) | null = null;
 let updateGamePosition: ((playerId: string, position: number) => void) | null = null;
 let updateGameCheer: ((team: FoosballTeam) => void) | null = null;
 let updateGameBallState: ((ballState: BallMovementState) => void) | null = null;
 let updateGameLobby: ((lobby: Lobby) => void) | null = null;
+let updateGameGoal: ((scoringTeam: TeamSide) => void) | null = null;
 let socketReconnectHandle: number | undefined;
 
 const app = document.querySelector<HTMLElement>("#app")!;
 const pitchScreen = app.querySelector<HTMLElement>("#pitch-screen")!;
 const lobbyScreen = app.querySelector<HTMLElement>("#lobby-screen")!;
 const waitingScreen = app.querySelector<HTMLElement>("#waiting-screen")!;
-const gyroTestScreen = app.querySelector<HTMLElement>("#gyro-test-screen")!;
 const screens: Record<ScreenName, HTMLElement> = {
   pitch: pitchScreen,
   lobby: lobbyScreen,
-  waiting: waitingScreen,
-  gyroTest: gyroTestScreen
+  waiting: waitingScreen
 };
 const homeView = createHomeView(lobbyScreen, {
   onCreate: handleCreateLobby,
@@ -58,30 +56,12 @@ window.addEventListener("hashchange", showCurrentRoute);
 showCurrentRoute();
 
 function showCurrentRoute(): void {
-  if (getCurrentPathRoute() === GYRO_TEST_ROUTE) {
-    showGyroTestView();
-    return;
-  }
-
   if (getCurrentRoute() === LOBBY_ROUTE) {
     showHomeView();
     return;
   }
 
   showPitchPreview();
-}
-
-function showGyroTestView(): void {
-  currentView = "gyroTest";
-  currentLobby = null;
-  currentPerson = null;
-  currentPositions = {};
-  currentBallState = null;
-  closeLobbySocket();
-  cleanupRenderedPage();
-  showScreen("gyroTest");
-
-  cleanupCurrentPage = renderGyroTestView(gyroTestScreen);
 }
 
 function showPitchPreview(): void {
@@ -160,6 +140,9 @@ function showGamePage(): void {
     onLobbyUpdater: (updater) => {
       updateGameLobby = updater;
     },
+    onGoalUpdater: (updater) => {
+      updateGameGoal = updater;
+    },
     onOpenLobby: showHomeView
   });
 }
@@ -229,6 +212,7 @@ function connectCurrentLobbySocket(): void {
     onPosition: handleSocketPosition,
     onCheer: handleSocketCheer,
     onBallState: handleSocketBallState,
+    onGoal: handleSocketGoal,
     onError: handleSocketError
   });
   clearSocketReconnect();
@@ -292,6 +276,10 @@ function handleSocketBallState(ballState: BallMovementState): void {
 
   currentBallState = ballState;
   updateGameBallState?.(ballState);
+}
+
+function handleSocketGoal(scoringTeam: TeamSide): void {
+  updateGameGoal?.(scoringTeam);
 }
 
 function handleLocalCheer(team: FoosballTeam): void {
@@ -379,10 +367,6 @@ function getErrorMessage(error: unknown): string {
 
 function getCurrentRoute(): string {
   return window.location.hash.replace(/^#\/?/, "").toLowerCase();
-}
-
-function getCurrentPathRoute(): string {
-  return window.location.pathname.replace(/^\/+|\/+$/g, "").toLowerCase();
 }
 
 function openLobbyRoute(): void {

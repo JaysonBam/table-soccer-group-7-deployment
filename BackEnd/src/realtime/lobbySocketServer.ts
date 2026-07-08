@@ -3,8 +3,8 @@
 import type { Server } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import {
-  createInitialBallMovementState,
   createKickBallMovementState,
+  createKickoffPauseBallMovementState,
   createRoundResetBallMovementState,
   createStoppedBallMovementState,
   getBallPositionAt,
@@ -12,8 +12,8 @@ import {
   getNextBallBoundaryEvent
 } from "../gameplay/ballMovement.ts";
 import type { LobbyService } from "../lobbies/lobbyService.ts";
-import { SOCCER_DEAD_BALL, SOCCER_KICK_TUNING, SOCCER_PLAYER_HORIZONTAL_RANGE } from "../shared/constants.ts";
-import type { AssignedPlayer, BallMovementState, ClientSocketMessage, Lobby, PlayerTeam, ServerSocketMessage, Vector2D } from "../shared/types.ts";
+import { SOCCER_DEAD_BALL, SOCCER_KICKOFF_PAUSE_MS, SOCCER_KICK_TUNING, SOCCER_PLAYER_HORIZONTAL_RANGE } from "../shared/constants.ts";
+import type { AssignedPlayer, BallMovementState, ClientSocketMessage, Lobby, PlayerTeam, ServerSocketMessage, TeamSide, Vector2D } from "../shared/types.ts";
 import { TEAM_CONFIG } from "../shared/types.ts";
 import { AppError } from "../shared/errors.ts";
 
@@ -158,7 +158,7 @@ export function createLobbySocketServer(server: Server, lobbyService: LobbyServi
       return;
     }
 
-    publishBallState(lobby.code, createInitialBallMovementState(1));
+    publishBallState(lobby.code, createKickoffPauseBallMovementState(1));
   }
 
   function publishBallState(lobbyCode: string, ballState: BallMovementState): void {
@@ -213,6 +213,7 @@ export function createLobbySocketServer(server: Server, lobbyService: LobbyServi
   }
 
   function scheduleDeadBallReset(lobbyCode: string, ballState: BallMovementState): void {
+    const delayMs = ballState.reason === "kickoff-pause" ? SOCCER_KICKOFF_PAUSE_MS : SOCCER_DEAD_BALL.respawnDelayMs;
     const timer = setTimeout(() => {
       const currentBallState = lobbyBallStates.get(lobbyCode);
       const lobby = lobbyService.getLobby(lobbyCode);
@@ -222,12 +223,12 @@ export function createLobbySocketServer(server: Server, lobbyService: LobbyServi
       }
 
       publishBallState(lobbyCode, createRoundResetBallMovementState(ballState.sequence + 1));
-    }, SOCCER_DEAD_BALL.respawnDelayMs);
+    }, delayMs);
 
     lobbyBallTimers.set(lobbyCode, timer);
   }
 
-  function handleGoal(lobbyCode: string, scoringTeam: "team1" | "team2", scoredAt: number): void {
+  function handleGoal(lobbyCode: string, scoringTeam: TeamSide, scoredAt: number): void {
     let lobby: Lobby;
 
     try {
@@ -241,12 +242,13 @@ export function createLobbySocketServer(server: Server, lobbyService: LobbyServi
     }
 
     broadcastLobby(lobby);
+    broadcastToLobby(lobbyCode, { type: "goal", scoringTeam });
 
     if (lobby.match?.status === "active") {
       const currentBallState = lobbyBallStates.get(lobbyCode);
       const nextSequence = (currentBallState?.sequence ?? 0) + 1;
 
-      publishBallState(lobbyCode, createRoundResetBallMovementState(nextSequence));
+      publishBallState(lobbyCode, createKickoffPauseBallMovementState(nextSequence));
       return;
     }
 

@@ -22,6 +22,19 @@
   --font-size-body: 1rem;
   --font-size-title: 2rem;
   --font-size-section: 1.0625rem;
+  --color-sky: #8fcdf7;
+  --color-sky-light: #dff4ff;
+  --color-sun: #ffd95a;
+  --color-cloud: #ffffff;
+  --color-card-border: #243452;
+  --color-card-shadow: rgba(31, 41, 51, 0.18);
+  --color-button: #f7d45d;
+  --color-button-hover: #efcb4e;
+  --color-strip-yellow: #f7d45d;
+  --color-strip-orange: #ea934d;
+  --color-strip-green: #7bc67b;
+  --shadow-card: 0 0.75rem 0 rgba(31, 41, 51, 0.18);
+
   color: var(--color-text);
   background: var(--color-background);
   font-family: Arial, Helvetica, sans-serif;
@@ -44,7 +57,41 @@
 body {
   margin: 0;
   min-width: 20rem;
-  background: var(--color-background);
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+  background: linear-gradient(
+    to bottom,
+    var(--color-sky),
+    var(--color-sky-light)
+  );
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+}
+
+body::before {
+  top: 6vh;
+  right: 6vw;
+  width: 8rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--color-sun);
+  box-shadow: 0 0 0 1rem rgba(255, 217, 90, 0.2);
+}
+
+body::after {
+  top: 8vh;
+  left: 8vw;
+  width: 12rem;
+  aspect-ratio: 3 / 1;
+  border-radius: 999rem;
+  background: var(--color-cloud);
+  box-shadow: 2.5rem -1rem 0 var(--color-cloud), 5rem 0 0 var(--color-cloud);
 }
 
 button,
@@ -65,8 +112,9 @@ p {
 }
 
 h1 {
-  font-size: var(--font-size-title);
-  font-weight: 700;
+  font-size: clamp(3rem, 6vw, 4rem);
+  font-weight: 800;
+  color: var(--color-card-border);
 }
 
 h2 {
@@ -80,17 +128,48 @@ h2 {
 
 .page {
   width: min(100%, 57.5rem);
-  min-height: 100svh;
+  min-height: 100vh;
   margin: 0 auto;
-  padding: var(--space-6) var(--space-4);
+  padding: 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  justify-content: center;
+  gap: 0.4rem;
 }
 
 .page-narrow {
-  max-width: 28.75rem;
-  justify-content: center;
+  width: min(calc(100% - 1rem), 22rem);
+  max-width: 22rem;
+  padding: 0;
+}
+
+.lobby-card {
+  position: relative;
+  padding: 2.8rem 1rem 0.9rem;
+  overflow: hidden;
+  border: 0.18rem solid var(--color-card-border);
+  border-radius: 0.8rem;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.lobby-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1rem;
+  border-radius: 0 0 0.75rem 0.75rem;
+  background: linear-gradient(
+    to right,
+    var(--color-strip-yellow) 0%,
+    var(--color-strip-yellow) 33%,
+    var(--color-strip-orange) 33%,
+    var(--color-strip-orange) 66%,
+    var(--color-strip-green) 66%,
+    var(--color-strip-green) 100%
+  );
 }
 
 .page-header,
@@ -103,12 +182,30 @@ h2 {
 }
 
 .page-header {
-  gap: var(--space-2);
+  gap: 0.05rem;
+  padding-top: 0;
+  margin-bottom: 0.1rem;
+}
+
+#lobby-screen .page-header {
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+#lobby-screen h1 {
+  font-size: clamp(2.7rem, 8vw, 4rem);
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+}
+
+#lobby-screen .form-stack,
+#lobby-screen .main-actions {
+  gap: 0.75rem;
 }
 
 .form-stack,
 .setup-sections {
-  gap: var(--space-4);
+  gap: 0.5rem;
 }
 
 .field,
@@ -126,11 +223,12 @@ h2 {
 .field select {
   width: 100%;
   min-height: 3rem;
-  padding: 0.625rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  padding: 0.75rem 1rem;
+  border: 0.18rem solid var(--color-border);
+  border-radius: 0.75rem;
+  background: #f5f7fb;
   color: var(--color-text);
+  font-weight: 600;
 }
 
 .field input:focus,
@@ -151,26 +249,37 @@ h2 {
 
 .main-actions,
 .dialog-actions {
-  display: grid;
-  gap: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
 .button {
-  min-height: 3rem;
+  min-height: 2.4rem;
   width: 100%;
-  padding: 0.625rem 0.875rem;
+  padding: 0.45rem 0.7rem;
+  margin: 0;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 700;
 }
 
 .button.primary {
-  background: var(--color-primary);
-  color: #ffffff;
+  border: 0.2rem solid var(--color-card-border);
+  background: var(--color-button);
+  color: var(--color-text);
+  box-shadow: 0 0.4rem 0 rgba(31, 41, 51, 0.18);
+  transition: background 150ms ease, transform 150ms ease;
 }
 
 .button.primary:hover {
-  background: var(--color-primary-dark);
+  background: var(--color-button-hover);
+  transform: translateY(-0.1rem);
+}
+
+.button.primary:active {
+  transform: translateY(0.15rem);
+  box-shadow: none;
 }
 
 .button.secondary {
@@ -191,57 +300,6 @@ h2 {
 
 .status-message:empty {
   display: none;
-}
-
-.gyro-test-page {
-  align-items: stretch;
-}
-
-.gyro-test-panel {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.gyro-test-readout {
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  font-size: 1.25rem;
-  font-weight: 700;
-  text-align: center;
-}
-
-.gyro-test-details {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-}
-
-.gyro-test-details div {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-}
-
-.gyro-test-details dt {
-  font-weight: 700;
-}
-
-.gyro-test-details dd {
-  margin: 0;
-  color: var(--color-muted);
-  text-align: right;
-}
-
-.gyro-test-link {
-  display: inline-grid;
-  place-items: center;
-  text-decoration: none;
 }
 
 .modal {
@@ -301,9 +359,10 @@ h2 {
 .setup-panel,
 .ready-panel {
   padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border: 0.2rem solid var(--color-card-border);
+  border-radius: 1rem;
   background: var(--color-surface);
+  box-shadow: var(--shadow-card);
 }
 
 .game-code {
@@ -318,6 +377,11 @@ h2 {
 .team-grid {
   display: grid;
   gap: 0.875rem;
+  align-items: start;
+}
+
+.team-grid > .people-panel {
+  align-self: start;
 }
 
 .people-list {

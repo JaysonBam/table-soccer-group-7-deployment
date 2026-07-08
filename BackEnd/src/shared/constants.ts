@@ -65,3 +65,5 @@ export const SOCCER_DEAD_BALL = {
   speedThreshold: 1,
   respawnDelayMs: 5000
 } as const;
+
+export const SOCCER_KICKOFF_PAUSE_MS = 3000;

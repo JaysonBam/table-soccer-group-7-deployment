@@ -8,6 +8,7 @@ import type {
   KickRequest,
   Lobby,
   MatchState,
+  TeamSide,
   Vector2D
 } from "../types";
 
@@ -23,6 +24,7 @@ type PitchViewHandlers = {
   onCheerUpdater?: (updater: ((team: FoosballTeam) => void) | null) => void;
   onBallStateUpdater?: (updater: ((ballState: BallMovementState) => void) | null) => void;
   onLobbyUpdater?: (updater: ((lobby: Lobby) => void) | null) => void;
+  onGoalUpdater?: (updater: ((scoringTeam: TeamSide) => void) | null) => void;
   onOpenLobby?: () => void;
 };
 
@@ -54,6 +56,8 @@ type DragPointerState = {
 const PLAYER_X_RANGE_PERCENT = 38;
 const MAX_AUTONOMOUS_X = 1;
 const CHEER_BURST_DURATION_MS = 900;
+const GOAL_ANNOUNCEMENT_DURATION_MS = 3000;
+const KICKOFF_COUNTDOWN_MS = 3000;
 const MIN_KICK_SWIPE_DISTANCE = 24;
 const POSITION_SEND_INTERVAL_MS = 50;
 const POSITION_SEND_EPSILON = 0.015;
@@ -78,6 +82,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   const winLabel = screen.querySelector<HTMLSpanElement>("[data-win-label]")!;
   const statusLabel = screen.querySelector<HTMLSpanElement>("[data-status-label]")!;
   const goalFlash = screen.querySelector<HTMLElement>("[data-goal-flash]")!;
+  const kickoffCountdown = screen.querySelector<HTMLElement>("[data-kickoff-countdown]")!;
   const cheerRow = screen.querySelector<HTMLElement>("[data-cheer-row]")!;
   const cheerCounts = screen.querySelector<HTMLParagraphElement>("[data-cheer-counts]")!;
   const cheerTeam1Button = screen.querySelector<HTMLButtonElement>("[data-cheer-team1-button]")!;
@@ -103,6 +108,8 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   let matchFinished = matchState?.status === "finished";
   let team1CheerCount = 0;
   let team2CheerCount = 0;
+  let goalFlashTimeout: number | undefined;
+  let kickoffCountdownInterval: number | undefined;
   const isSpectator = handlers.currentPerson?.type === "spectator";
   const isTeam2View = handlers.currentPerson?.type === "team2Player";
 
@@ -114,6 +121,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   controlStatus.hidden = true;
   controlStatus.textContent = "";
   goalFlash.classList.remove("is-visible");
+  kickoffCountdown.classList.remove("is-visible");
   pitchFrame.classList.toggle("is-team2-view", isTeam2View);
   lobbyButton.hidden = !handlers.onOpenLobby;
   lobbyButton.addEventListener("click", () => handlers.onOpenLobby?.(), listenerOptions);
@@ -157,6 +165,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   handlers.onCheerUpdater?.((team) => playCheerBurst(team));
   handlers.onBallStateUpdater?.(updateBallState);
   handlers.onLobbyUpdater?.(applyLobbySnapshot);
+  handlers.onGoalUpdater?.((scoringTeam) => showGoalFlash(scoringTeam));
 
   if (handlers.initialBallState) {
     updateBallState(handlers.initialBallState);
@@ -179,6 +188,9 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     handlers.onCheerUpdater?.(null);
     handlers.onBallStateUpdater?.(null);
     handlers.onLobbyUpdater?.(null);
+    handlers.onGoalUpdater?.(null);
+    window.clearTimeout(goalFlashTimeout);
+    window.clearInterval(kickoffCountdownInterval);
     cancelAnimationFrame(ballAnimationFrame);
     stopDragPositionStream();
     dismissMotionPermissionPrompt();
@@ -192,9 +204,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function applyLobbySnapshot(lobby: Lobby): void {
-    const scoreIncreased = lobbyData !== null
-      && (lobby.score.team1 > team1ScoreValue || lobby.score.team2 > team2ScoreValue);
-
     lobbyData = lobby;
     team1ScoreValue = lobby.score.team1;
     team2ScoreValue = lobby.score.team2;
@@ -204,10 +213,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     matchFinished = matchState?.status === "finished";
     updateScoreboard();
     updateMatchMeta();
-
-    if (scoreIncreased) {
-      showGoalFlash();
-    }
 
     if (matchState?.status === "active") {
       startTimer();
@@ -288,9 +293,15 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     return "Draw";
   }
 
-  function showGoalFlash(): void {
+  function showGoalFlash(scoringTeam: TeamSide): void {
+    const teamName = scoringTeam === "team1"
+      ? lobbyData?.teamNames.team1 ?? "Team 1"
+      : lobbyData?.teamNames.team2 ?? "Team 2";
+
+    window.clearTimeout(goalFlashTimeout);
+    goalFlash.textContent = `${teamName} scored a goal!`;
     goalFlash.classList.add("is-visible");
-    window.setTimeout(() => goalFlash.classList.remove("is-visible"), 220);
+    goalFlashTimeout = window.setTimeout(() => goalFlash.classList.remove("is-visible"), GOAL_ANNOUNCEMENT_DURATION_MS);
   }
 
   function updatePlayerPosition(tilt: number, forceSend = false): void {
@@ -601,6 +612,38 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     setBallSize(ball, ballState);
     visualBallPosition ??= getPredictedBallPosition(ballState, serverClockOffsetMs);
     startBallAnimation();
+
+    if (ballState.reason === "kickoff-pause") {
+      startKickoffCountdown(ballState);
+    } else {
+      stopKickoffCountdown();
+    }
+  }
+
+  function startKickoffCountdown(ballState: BallMovementState): void {
+    window.clearInterval(kickoffCountdownInterval);
+    kickoffCountdown.classList.add("is-visible");
+
+    const tick = (): void => {
+      const elapsedMs = Date.now() - (ballState.serverTimestamp + serverClockOffsetMs);
+      const remainingMs = KICKOFF_COUNTDOWN_MS - elapsedMs;
+
+      if (remainingMs <= 0) {
+        stopKickoffCountdown();
+        return;
+      }
+
+      kickoffCountdown.textContent = String(Math.ceil(remainingMs / 1000));
+    };
+
+    tick();
+    kickoffCountdownInterval = window.setInterval(tick, 200);
+  }
+
+  function stopKickoffCountdown(): void {
+    window.clearInterval(kickoffCountdownInterval);
+    kickoffCountdownInterval = undefined;
+    kickoffCountdown.classList.remove("is-visible");
   }
 
   function startBallAnimation(): void {
