@@ -4,7 +4,7 @@
  * into its own coordinate system.
  */
 
-interface DeviceOrientationEventiOS {
+interface MotionPermissionEventClass {
   requestPermission?: () => Promise<"granted" | "denied">;
 }
 
@@ -18,22 +18,23 @@ export type GyroStartResult =
       reason: "unsupported" | "permission-denied" | "permission-error" | "insecure-context";
     };
 
-const SMOOTHING = 0.18;
-const GAMMA_RANGE = 30;
+const SMOOTHING = 0.12;
+const GAMMA_RANGE = 35;
+const INPUT_DEADZONE = 0.06;
+const OUTPUT_EPSILON = 0.01;
+const CALIBRATION_SAMPLES = 12;
 
 let rawGamma = 0;
 let smoothGamma = 0;
+let baselineGamma = 0;
+let calibrationCount = 0;
+let calibrationTotal = 0;
+let lastOutputTilt = 0;
 let onUpdate: TiltCallback | null = null;
 let isListening = false;
 
 export function needsGyroPermission(): boolean {
-  if (typeof DeviceOrientationEvent === "undefined") {
-    return false;
-  }
-
-  const DeviceOrientationEventClass = DeviceOrientationEvent as unknown as DeviceOrientationEventiOS;
-
-  return typeof DeviceOrientationEventClass.requestPermission === "function";
+  return getPermissionRequester() !== null;
 }
 
 export function canUseGyroControl(): boolean {
@@ -50,11 +51,18 @@ export async function initGyroControl(onUpdateCallback: TiltCallback): Promise<G
     };
   }
 
-  const DeviceOrientationEventClass = DeviceOrientationEvent as unknown as DeviceOrientationEventiOS;
+  if (!window.isSecureContext) {
+    return {
+      started: false,
+      reason: "insecure-context"
+    };
+  }
 
-  if (typeof DeviceOrientationEventClass.requestPermission === "function") {
+  const requestPermission = getPermissionRequester();
+
+  if (requestPermission) {
     try {
-      const result = await DeviceOrientationEventClass.requestPermission();
+      const result = await requestPermission();
 
       if (result === "granted") {
         startListening();
@@ -85,6 +93,10 @@ export function stopGyroControl(): void {
 
   rawGamma = 0;
   smoothGamma = 0;
+  baselineGamma = 0;
+  calibrationCount = 0;
+  calibrationTotal = 0;
+  lastOutputTilt = 0;
   onUpdate = null;
 }
 
@@ -114,6 +126,13 @@ function startListening(): void {
     return;
   }
 
+  rawGamma = 0;
+  smoothGamma = 0;
+  baselineGamma = 0;
+  calibrationCount = 0;
+  calibrationTotal = 0;
+  lastOutputTilt = 0;
+
   window.addEventListener("deviceorientation", handleOrientation, true);
   isListening = true;
 }
@@ -125,8 +144,49 @@ function handleOrientation(event: DeviceOrientationEvent): void {
 
   rawGamma = event.gamma;
 
-  const targetGamma = Math.max(-1, Math.min(1, rawGamma / GAMMA_RANGE));
+  if (calibrationCount < CALIBRATION_SAMPLES) {
+    calibrationTotal += rawGamma;
+    calibrationCount += 1;
+    baselineGamma = calibrationTotal / calibrationCount;
+  }
+
+  const centeredGamma = rawGamma - baselineGamma;
+  let targetGamma = Math.max(-1, Math.min(1, centeredGamma / GAMMA_RANGE));
+
+  if (Math.abs(targetGamma) < INPUT_DEADZONE) {
+    targetGamma = 0;
+  } else {
+    const adjustedMagnitude = (Math.abs(targetGamma) - INPUT_DEADZONE) / (1 - INPUT_DEADZONE);
+
+    targetGamma = Math.sign(targetGamma) * adjustedMagnitude;
+  }
 
   smoothGamma += (targetGamma - smoothGamma) * SMOOTHING;
+
+  if (Math.abs(smoothGamma - lastOutputTilt) < OUTPUT_EPSILON) {
+    return;
+  }
+
+  lastOutputTilt = smoothGamma;
   onUpdate?.(smoothGamma);
+}
+
+function getPermissionRequester(): (() => Promise<"granted" | "denied">) | null {
+  if (typeof DeviceOrientationEvent !== "undefined") {
+    const orientationClass = DeviceOrientationEvent as unknown as MotionPermissionEventClass;
+
+    if (typeof orientationClass.requestPermission === "function") {
+      return orientationClass.requestPermission.bind(orientationClass);
+    }
+  }
+
+  if (typeof DeviceMotionEvent !== "undefined") {
+    const motionClass = DeviceMotionEvent as unknown as MotionPermissionEventClass;
+
+    if (typeof motionClass.requestPermission === "function") {
+      return motionClass.requestPermission.bind(motionClass);
+    }
+  }
+
+  return null;
 }

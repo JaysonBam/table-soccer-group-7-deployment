@@ -159,7 +159,10 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   updateMatchMeta();
   startTimer();
 
-  const stopKeyboardFallback = controlledMarker ? initKeyboardFallback(updatePlayerPosition) : () => undefined;
+  const applyViewOrientation = (tilt: number): number => isTeam2View ? -tilt : tilt;
+  const updateTiltPosition = (tilt: number): void => updatePlayerPosition(applyViewOrientation(tilt));
+
+  const stopKeyboardFallback = controlledMarker ? initKeyboardFallback(updateTiltPosition) : () => undefined;
 
   if (controlledMarker && !needsGyroPermission()) {
     void startGyro();
@@ -302,7 +305,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       return;
     }
 
-    const motionResult = await initGyroControl(updatePlayerPosition);
+    const motionResult = await initGyroControl(updateTiltPosition);
 
     if (motionResult.started) {
       motionButton.hidden = true;
