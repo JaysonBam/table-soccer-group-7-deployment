@@ -1,5 +1,6 @@
 import "./style.css";
 import { createLobby, joinLobby } from "./api";
+import { resetDiagnostics } from "./diagnostics";
 import { connectLobbySocket, type LobbySocketConnection } from "./lobbySocket";
 import { saveStoredClientName } from "./storage";
 import { createHomeView } from "./views/homeView";
@@ -175,6 +176,7 @@ function enterLobby(lobby: Lobby, data: LobbyRequest): void {
   currentPerson = createClientPerson(lobby, data.personName, data.joinChoice);
   currentPositions = {};
   currentBallState = null;
+  resetDiagnostics(currentLobby, currentPerson);
   connectCurrentLobbySocket();
   saveStoredClientName(currentPerson.name);
   showWaitingRoom();

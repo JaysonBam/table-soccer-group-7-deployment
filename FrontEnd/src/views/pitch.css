@@ -632,6 +632,62 @@
   opacity: 1;
 }
 
+.pitch-page .diagnostics-page {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: clamp(14px, 3vw, 28px);
+  overflow: auto;
+  background: rgba(3, 10, 14, 0.96);
+  color: #ffffff;
+}
+
+.pitch-page .diagnostics-page h2 {
+  margin: 0;
+  font-size: clamp(1.35rem, 4vw, 2.1rem);
+}
+
+.pitch-page .diagnostics-page p {
+  margin: 0;
+}
+
+.pitch-page .diagnostics-notes {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 0 0 20px;
+}
+
+.pitch-page .diagnostics-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.pitch-page .diagnostics-copy-status {
+  color: rgba(255, 255, 255, 0.76);
+  font-weight: 700;
+}
+
+.pitch-page .diagnostics-json {
+  min-height: 240px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #dff4ff;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (orientation: portrait) and (max-width: 900px) {
   .page.pitch-page {
     padding: clamp(8px, 3vw, 12px);

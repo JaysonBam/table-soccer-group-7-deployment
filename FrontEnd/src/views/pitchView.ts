@@ -1,4 +1,20 @@
 import { canUseGyroControl, initGyroControl, initKeyboardFallback, needsGyroPermission, stopGyroControl } from "../game/gyro-control";
+import {
+  createDiagnosticsReport,
+  formatDiagnosticsReport,
+  recordDragEnd,
+  recordDragStart,
+  recordFrame,
+  recordKick,
+  recordLayoutRead,
+  recordLocalPositionSend,
+  recordLocalPositionUpdate,
+  recordPointerDown,
+  recordPointerMove,
+  recordRemotePositionUpdate,
+  recordStyleWrite,
+  recordTouchMove
+} from "../diagnostics";
 import type {
   AssignedFoosballPlayer,
   BallMovementState,
@@ -61,7 +77,6 @@ const KICKOFF_COUNTDOWN_MS = 3000;
 const MIN_KICK_SWIPE_DISTANCE = 24;
 const POSITION_SEND_INTERVAL_MS = 50;
 const POSITION_SEND_EPSILON = 0.015;
-const GYRO_RENDER_EASE = 0.25;
 
 export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers = {}): () => void {
   const listenerController = new AbortController();
@@ -94,13 +109,12 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   let activeSwipe: SwipePointerState | null = null;
   let activeDrag: DragPointerState | null = null;
   let motionPermissionPrompt: HTMLDivElement | null = null;
+  let diagnosticsPanel: HTMLDivElement | null = null;
   let ballAnimationFrame = 0;
   let serverClockOffsetMs = 0;
   let currentControlledPosition = Number.NaN;
   let lastSentPosition = Number.NaN;
   let lastSentAt = 0;
-  let gyroTargetPosition = Number.NaN;
-  let gyroRenderFrame = 0;
   let team1ScoreValue = handlers.lobby?.score.team1 ?? 0;
   let team2ScoreValue = handlers.lobby?.score.team2 ?? 0;
   let lobbyData: Lobby | null = handlers.lobby ?? null;
@@ -162,6 +176,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     const marker = markerByPlayerId.get(playerId);
 
     if (marker) {
+      recordRemotePositionUpdate();
       setMarkerHorizontalPosition(marker, position);
     }
   });
@@ -177,6 +192,10 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   updateScoreboard();
   updateMatchMeta();
   startTimer();
+
+  if (matchFinished) {
+    showDiagnosticsPage();
+  }
 
   const stopKeyboardFallback = controlledMarker ? initKeyboardFallback(updateScreenAxisPlayerPosition) : () => undefined;
 
@@ -194,9 +213,9 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     handlers.onGoalUpdater?.(null);
     window.clearTimeout(goalFlashTimeout);
     window.clearInterval(kickoffCountdownInterval);
+    diagnosticsPanel?.remove();
     cancelAnimationFrame(ballAnimationFrame);
     stopDragPositionStream();
-    stopGyroRenderLoop();
     dismissMotionPermissionPrompt();
     stopKeyboardFallback();
     stopGyroControl();
@@ -217,6 +236,10 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     matchFinished = matchState?.status === "finished";
     updateScoreboard();
     updateMatchMeta();
+
+    if (matchFinished) {
+      showDiagnosticsPage();
+    }
 
     if (matchState?.status === "active") {
       startTimer();
@@ -315,53 +338,14 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
 
     const clampedTilt = Math.max(-1, Math.min(1, tilt));
 
+    recordLocalPositionUpdate();
     currentControlledPosition = clampedTilt;
     setMarkerHorizontalPosition(controlledMarker.element, clampedTilt);
     sendControlledPosition(clampedTilt, forceSend);
   }
 
   function updateScreenAxisPlayerPosition(tilt: number, forceSend = false): void {
-    updatePlayerPosition(toScreenAxisPosition(tilt), forceSend);
-  }
-
-  function toScreenAxisPosition(tilt: number): number {
-    return isTeam2View ? -tilt : tilt;
-  }
-
-  function updateGyroPosition(tilt: number): void {
-    gyroTargetPosition = toScreenAxisPosition(tilt);
-    ensureGyroRenderLoop();
-  }
-
-  // iOS dispatches deviceorientation far less often/regularly than Android, so driving the
-  // marker straight off each event (as keyboard/drag do) looks stepped. Render every animation
-  // frame instead and ease toward the latest sensor reading, independent of event rate.
-  function ensureGyroRenderLoop(): void {
-    if (gyroRenderFrame) {
-      return;
-    }
-
-    const renderGyroPosition = (): void => {
-      if (!controlledMarker || Number.isNaN(gyroTargetPosition)) {
-        gyroRenderFrame = 0;
-        return;
-      }
-
-      const easedPosition = Number.isNaN(currentControlledPosition)
-        ? gyroTargetPosition
-        : currentControlledPosition + (gyroTargetPosition - currentControlledPosition) * GYRO_RENDER_EASE;
-
-      updatePlayerPosition(easedPosition);
-      gyroRenderFrame = requestAnimationFrame(renderGyroPosition);
-    };
-
-    gyroRenderFrame = requestAnimationFrame(renderGyroPosition);
-  }
-
-  function stopGyroRenderLoop(): void {
-    cancelAnimationFrame(gyroRenderFrame);
-    gyroRenderFrame = 0;
-    gyroTargetPosition = Number.NaN;
+    updatePlayerPosition(isTeam2View ? -tilt : tilt, forceSend);
   }
 
   async function startGyro(): Promise<void> {
@@ -369,7 +353,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       return;
     }
 
-    const motionResult = await initGyroControl(updateGyroPosition);
+    const motionResult = await initGyroControl(updateScreenAxisPlayerPosition);
 
     if (motionResult.started) {
       motionButton.hidden = true;
@@ -429,6 +413,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
 
     lastSentPosition = position;
     lastSentAt = now;
+    recordLocalPositionSend();
     handlers.onPositionChange?.(position);
   }
 
@@ -443,6 +428,8 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function handleKickPointerDown(event: PointerEvent): void {
+    recordPointerDown();
+
     if (!controlledMarker || isSpectator || matchFinished) {
       return;
     }
@@ -456,6 +443,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
         animationFrame: 0
       };
       boundary.setPointerCapture(event.pointerId);
+      recordDragStart();
       updateControlledPositionFromPointer(event, true);
       startDragPositionStream();
       event.preventDefault();
@@ -478,6 +466,8 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function handleKickPointerMove(event: PointerEvent): void {
+    recordPointerMove();
+
     if (activeDrag?.pointerId === event.pointerId) {
       updateControlledPositionFromPointer(event);
       event.preventDefault();
@@ -502,6 +492,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   function handleKickPointerEnd(event: PointerEvent): void {
     if (activeDrag?.pointerId === event.pointerId) {
       updateControlledPositionFromPointer(event, true);
+      recordDragEnd();
       stopDragPositionStream();
       releasePointerCapture(event.pointerId);
       event.preventDefault();
@@ -523,6 +514,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     releasePointerCapture(event.pointerId);
 
     if (kickRequest) {
+      recordKick();
       handlers.onKick?.(kickRequest);
     }
   }
@@ -595,6 +587,8 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function handleDragTouchMove(event: TouchEvent): void {
+    recordTouchMove();
+
     if (!activeDrag || event.touches.length === 0) {
       return;
     }
@@ -608,6 +602,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function getPositionFromClientPoint(clientX: number, clientY: number): number {
+    recordLayoutRead();
     const bounds = boundary.getBoundingClientRect();
     const usesHorizontalScreenAxis = window.matchMedia("(orientation: portrait) and (max-width: 900px)").matches;
     const pointerOffset = usesHorizontalScreenAxis
@@ -706,11 +701,64 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       visualBallPosition = visualBallPosition
         ? interpolateVector(visualBallPosition, targetPosition, 0.35)
         : targetPosition;
+      recordFrame();
       setBallPosition(ball, latestBallState, visualBallPosition);
       ballAnimationFrame = requestAnimationFrame(renderBall);
     };
 
     ballAnimationFrame = requestAnimationFrame(renderBall);
+  }
+
+  function showDiagnosticsPage(): void {
+    if (diagnosticsPanel) {
+      return;
+    }
+
+    const report = createDiagnosticsReport(lobbyData, handlers.currentPerson);
+    const formattedReport = formatDiagnosticsReport(report);
+    const panel = document.createElement("div");
+    const heading = document.createElement("h2");
+    const intro = document.createElement("p");
+    const notes = document.createElement("ul");
+    const actions = document.createElement("p");
+    const copyButton = document.createElement("button");
+    const closeButton = document.createElement("button");
+    const copyStatus = document.createElement("span");
+    const json = document.createElement("pre");
+
+    panel.className = "diagnostics-page";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Temporary diagnostics report");
+    heading.textContent = "Temporary diagnostics report";
+    intro.textContent = "Compare this report between a smooth phone and a laggy phone after the same match.";
+    notes.className = "diagnostics-notes";
+
+    for (const note of report.notes) {
+      const item = document.createElement("li");
+
+      item.textContent = note;
+      notes.append(item);
+    }
+
+    actions.className = "diagnostics-actions";
+    copyButton.className = "pitch-action";
+    copyButton.type = "button";
+    copyButton.textContent = "Copy JSON";
+    copyButton.addEventListener("click", () => {
+      void copyDiagnosticsReport(formattedReport, copyStatus);
+    });
+    closeButton.className = "pitch-action";
+    closeButton.type = "button";
+    closeButton.textContent = "Close report";
+    closeButton.addEventListener("click", () => panel.remove());
+    copyStatus.className = "diagnostics-copy-status";
+    actions.append(copyButton, closeButton, copyStatus);
+
+    json.className = "diagnostics-json";
+    json.textContent = formattedReport;
+    panel.append(heading, intro, notes, actions, json);
+    screen.append(panel);
+    diagnosticsPanel = panel;
   }
 }
 
@@ -820,7 +868,17 @@ function createGameplayPlayerElement(assignment: AssignedFoosballPlayer, isContr
 function setMarkerHorizontalPosition(marker: HTMLDivElement, value: number): void {
   const clampedValue = Math.max(-MAX_AUTONOMOUS_X, Math.min(MAX_AUTONOMOUS_X, value));
 
+  recordStyleWrite();
   marker.style.setProperty("--player-x", `${clampedValue * PLAYER_X_RANGE_PERCENT}%`);
+}
+
+async function copyDiagnosticsReport(report: string, status: HTMLElement): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(report);
+    status.textContent = "Copied";
+  } catch {
+    status.textContent = "Copy unavailable";
+  }
 }
 
 function getPredictedBallPosition(ballState: BallMovementState, serverClockOffsetMs: number): Vector2D {

@@ -1,4 +1,15 @@
 import { FALLBACK_WS_URL, WS_URL } from "./config";
+import {
+  recordSocketClose,
+  recordSocketDropped,
+  recordSocketError,
+  recordSocketFallback,
+  recordSocketMessage,
+  recordSocketOpen,
+  recordSocketPendingFlush,
+  recordSocketQueued,
+  recordSocketSend
+} from "./diagnostics";
 import type { BallMovementState, FoosballTeam, KickRequest, Lobby, TeamSide } from "./types";
 
 type LobbySocketMessage =
@@ -86,13 +97,18 @@ export function connectLobbySocket(
 
   const sendMessage = (message: ClientSocketMessage): void => {
     if (socket.readyState === WebSocket.OPEN) {
+      recordSocketSend(message.type, socket.readyState);
       socket.send(JSON.stringify(message));
       return;
     }
 
     if (socket.readyState === WebSocket.CONNECTING) {
+      recordSocketQueued(message.type, socket.readyState);
       pendingMessages.push(message);
+      return;
     }
+
+    recordSocketDropped(message.type, socket.readyState);
   };
 
   return {
@@ -120,9 +136,18 @@ export function connectLobbySocket(
       }
 
       opened = true;
+      recordSocketOpen(urlIndex, nextSocket.readyState);
 
       while (pendingMessages.length > 0 && nextSocket.readyState === WebSocket.OPEN) {
-        nextSocket.send(JSON.stringify(pendingMessages.shift()));
+        const pendingMessage = pendingMessages.shift();
+
+        if (!pendingMessage) {
+          continue;
+        }
+
+        recordSocketPendingFlush(1);
+        recordSocketSend(pendingMessage.type, nextSocket.readyState);
+        nextSocket.send(JSON.stringify(pendingMessage));
       }
     });
 
@@ -132,8 +157,12 @@ export function connectLobbySocket(
       }
 
       try {
-        handleSocketMessage(JSON.parse(String(event.data)) as LobbySocketMessage, handlers);
+        const message = JSON.parse(String(event.data)) as LobbySocketMessage;
+
+        recordSocketMessage(message.type);
+        handleSocketMessage(message, handlers);
       } catch {
+        recordSocketError("Received an invalid lobby socket message.", nextSocket.readyState);
         handlers.onError("Received an invalid lobby socket message.");
       }
     });
@@ -145,20 +174,25 @@ export function connectLobbySocket(
 
       if (!opened && urlIndex + 1 < socketUrls.length) {
         fallbackStarted = true;
+        recordSocketFallback();
         openSocket(urlIndex + 1);
         nextSocket.close();
         return;
       }
 
+      recordSocketError("Lobby socket connection failed.", nextSocket.readyState);
       handlers.onError("Lobby socket connection failed.");
     });
 
-    nextSocket.addEventListener("close", () => {
+    nextSocket.addEventListener("close", (event) => {
+      recordSocketClose(event.code, nextSocket.readyState);
+
       if (generation !== socketGeneration || closedByClient) {
         return;
       }
 
       if (!opened && !fallbackStarted && urlIndex + 1 < socketUrls.length) {
+        recordSocketFallback();
         openSocket(urlIndex + 1);
         return;
       }
