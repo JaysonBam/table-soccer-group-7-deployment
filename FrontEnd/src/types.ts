@@ -27,6 +27,15 @@ export type Captains = {
   team2: string | null;
 };
 
+export type PlayerStats = {
+  playerId: string;
+  kicks: number;
+  blocks: number;
+  goals: number;
+  ownGoals: number;
+  points: number;
+};
+
 export type GameSettings = {
   mode: "firstTo" | "suddenDeath";
   winTarget: number;
@@ -50,6 +59,8 @@ export type Lobby = {
   captains: Captains;
   teamNames: TeamNames;
   settings: GameSettings;
+  playerStats: Record<string, PlayerStats>;
+  lastTouchPlayerId: string | null;
   match?: MatchState;
   assignments?: AssignedFoosballPlayer[];
 };

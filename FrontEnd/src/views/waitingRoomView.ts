@@ -10,6 +10,7 @@ type DisplayPerson = {
   name: string;
   ready: boolean;
   type: PersonType;
+  isCaptain: boolean;
 };
 
 const MIN_GAME_PLAYERS = 6;
@@ -40,20 +41,6 @@ export function createWaitingRoomView(
   const statusMessage = screen.querySelector<HTMLParagraphElement>("[data-waiting-status-message]")!;
   let currentLobby: Lobby | null = null;
   let currentPerson: ClientPerson | null = null;
-
-  team1CaptainSelect.addEventListener("change", () => {
-    void updateLobbySettings(currentLobby!.code, {
-      playerId: currentPerson!.id,
-      captains: { team1: team1CaptainSelect.value || null }
-    });
-  });
-
-  team2CaptainSelect.addEventListener("change", () => {
-    void updateLobbySettings(currentLobby!.code, {
-      playerId: currentPerson!.id,
-      captains: { team2: team2CaptainSelect.value || null }
-    });
-  });
 
   team1NameInput.addEventListener("change", () => {
     void updateLobbySettings(currentLobby!.code, {
@@ -133,7 +120,7 @@ export function createWaitingRoomView(
     const isHost = person.id === lobby.hostId;
     const isTeam1Captain = person.id === lobby.captains.team1;
     const isTeam2Captain = person.id === lobby.captains.team2;
-    const canEditSettings = isHost || isTeam1Captain || isTeam2Captain;
+    const canEditTeamNames = isTeam1Captain || isTeam2Captain;
     const startStatus = getStartStatus(lobby);
     const remainingReadyPlayers = getRemainingReadyPlayers(lobby);
     const isReady = isPersonReady(lobby, person);
@@ -154,13 +141,13 @@ export function createWaitingRoomView(
     timerMinutesInput.value = String(Math.floor(lobby.settings.timerSeconds / 60));
     timerSecondsInput.value = String(lobby.settings.timerSeconds % 60);
 
-    captainFields.hidden = !isHost;
-    teamNameFields.hidden = !canEditSettings;
+    captainFields.hidden = true;
+    teamNameFields.hidden = !canEditTeamNames;
     matchSettings.hidden = !isHost;
-    team1NameField.hidden = !isHost && !isTeam1Captain;
-    team2NameField.hidden = !isHost && !isTeam2Captain;
-    setupNotice.hidden = canEditSettings;
-    setupNotice.textContent = "Only the host or captains can change match setup.";
+    team1NameField.hidden = !isTeam1Captain;
+    team2NameField.hidden = !isTeam2Captain;
+    setupNotice.hidden = canEditTeamNames;
+    setupNotice.textContent = "Only captains can change team names.";
 
     populatePeopleList(screen, "team1Player", lobby, person);
     populatePeopleList(screen, "team2Player", lobby, person);
@@ -212,7 +199,7 @@ function populatePeopleList(
   clientPerson: ClientPerson
 ): void {
   const list = screen.querySelector<HTMLUListElement>(`[data-people-list="${type}"]`)!;
-  const people = createDisplayPeople(lobby.players, clientPerson).filter((person) => person.type === type);
+  const people = createDisplayPeople(lobby, clientPerson).filter((person) => person.type === type);
 
   list.replaceChildren();
 
@@ -233,13 +220,17 @@ function populatePeopleList(
 function createPersonListItem(person: DisplayPerson): HTMLLIElement {
   const item = document.createElement("li");
   const name = document.createElement("span");
+  const captainBadge = document.createElement("span");
   const readyPill = document.createElement("span");
 
   item.className = "person-item";
   name.textContent = person.name;
+  captainBadge.className = "captain-pill";
+  captainBadge.textContent = "Captain";
+  captainBadge.hidden = !person.isCaptain;
   readyPill.className = "ready-pill";
   readyPill.hidden = true;
-  item.append(name, readyPill);
+  item.append(name, captainBadge, readyPill);
 
   if (person.type !== "spectator") {
     readyPill.hidden = false;
@@ -250,10 +241,10 @@ function createPersonListItem(person: DisplayPerson): HTMLLIElement {
   return item;
 }
 
-function createDisplayPeople(players: Player[], clientPerson: ClientPerson): DisplayPerson[] {
+function createDisplayPeople(lobby: Lobby, clientPerson: ClientPerson): DisplayPerson[] {
   let rosterIndex = 0;
 
-  return players.map((player) => {
+  return lobby.players.map((player) => {
     const isCurrentClient = player.id === clientPerson.id;
     const isSpectator = isCurrentClient
       ? clientPerson.type === "spectator"
@@ -264,7 +255,8 @@ function createDisplayPeople(players: Player[], clientPerson: ClientPerson): Dis
         id: player.id,
         name: player.name,
         ready: player.ready,
-        type: "spectator"
+        type: "spectator",
+        isCaptain: player.id === lobby.captains.team1 || player.id === lobby.captains.team2
       };
     }
 
@@ -278,7 +270,8 @@ function createDisplayPeople(players: Player[], clientPerson: ClientPerson): Dis
       id: player.id,
       name: player.name,
       ready: player.ready,
-      type
+      type,
+      isCaptain: player.id === lobby.captains.team1 || player.id === lobby.captains.team2
     };
   });
 }

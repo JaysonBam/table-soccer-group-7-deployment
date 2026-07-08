@@ -4,8 +4,6 @@
  * into its own coordinate system.
  */
 
-import { recordMotionPermission, recordMotionStart, recordOrientationEvent } from "../diagnostics";
-
 interface DeviceMotionPermissionEvent {
   requestPermission?: () => Promise<"granted" | "denied">;
 }
@@ -40,7 +38,6 @@ export async function initGyroControl(onUpdateCallback: TiltCallback): Promise<G
   onUpdate = onUpdateCallback;
 
   if (!canUseGyroControl()) {
-    recordMotionStart(false);
     return {
       started: false,
       reason: window.isSecureContext ? "unsupported" : "insecure-context"
@@ -54,18 +51,12 @@ export async function initGyroControl(onUpdateCallback: TiltCallback): Promise<G
       const result = await permissionEvent.requestPermission();
 
       if (result !== "granted") {
-        recordMotionPermission("denied");
-        recordMotionStart(false);
         return {
           started: false,
           reason: "permission-denied"
         };
       }
-
-      recordMotionPermission("granted");
     } catch {
-      recordMotionPermission("error");
-      recordMotionStart(false);
       return {
         started: false,
         reason: "permission-error"
@@ -74,7 +65,6 @@ export async function initGyroControl(onUpdateCallback: TiltCallback): Promise<G
   }
 
   if (typeof DeviceOrientationEvent === "undefined") {
-    recordMotionStart(false);
     return {
       started: false,
       reason: "unsupported"
@@ -82,7 +72,6 @@ export async function initGyroControl(onUpdateCallback: TiltCallback): Promise<G
   }
 
   startListening();
-  recordMotionStart(true);
   return { started: true };
 }
 
@@ -128,8 +117,6 @@ function startListening(): void {
 }
 
 function handleOrientation(event: DeviceOrientationEvent): void {
-  recordOrientationEvent(event.gamma !== null);
-
   if (event.gamma === null) {
     return;
   }

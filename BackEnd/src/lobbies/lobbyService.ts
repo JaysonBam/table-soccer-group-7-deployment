@@ -3,16 +3,18 @@
 import { randomUUID } from "node:crypto";
 import { assignSoccerTeams } from "../gameplay/assignSoccerTeams.ts";
 import { DEFAULT_GAME_SETTINGS, DEFAULT_TEAM_NAMES, EMPTY_CAPTAINS, EMPTY_SCORE, MAX_LOBBY_PLAYERS, TEAM_PLAYER_LIMIT } from "../shared/constants.ts";
-import type { Captains, GameSettings, JoinChoice, Lobby, LobbySettingsUpdateRequest, MatchFinishReason, MatchState, Player, TeamNames, TeamSide } from "../shared/types.ts";
-import { getActivePlayers, TEAM_SIDES } from "../shared/types.ts";
+import type { AssignedPlayer, Captains, GameSettings, JoinChoice, Lobby, LobbySettingsUpdateRequest, MatchFinishReason, MatchState, Player, PlayerStats, PlayerTeam, TeamNames, TeamSide } from "../shared/types.ts";
+import { getActivePlayers, TEAM_CONFIG, TEAM_SIDES } from "../shared/types.ts";
 import { AppError } from "../shared/errors.ts";
 
 export type LobbyService = {
   createLobby: (playerName: string, joinChoice: JoinChoice) => Lobby;
   joinLobby: (code: string, playerName: string, joinChoice: JoinChoice) => Lobby;
   getLobby: (code: string) => Lobby;
+  recordBallTouch: (code: string, playerId: string, touchedAt?: number) => Lobby;
   recordGoal: (code: string, team: TeamSide, scoredAt?: number) => Lobby;
   resetMatch: (code: string) => Lobby;
+  returnToWaitingRoom: (code: string, playerId: string) => Lobby;
   finishExpiredMatch: (code: string, now?: number) => Lobby;
   updateLobbySettings: (code: string, update: LobbySettingsUpdateRequest) => Lobby;
   markPlayerReady: (code: string, playerId: string) => Lobby;
@@ -20,13 +22,16 @@ export type LobbyService = {
 
 export function createLobbyService(): LobbyService {
   const lobbies = new Map<string, Lobby>();
+  const lobbyLastCountedTouch = new Map<string, { playerId: string; touchedAt: number }>();
 
   return {
     createLobby,
     joinLobby,
     getLobby,
+    recordBallTouch,
     recordGoal,
     resetMatch,
+    returnToWaitingRoom,
     finishExpiredMatch,
     updateLobbySettings,
     markPlayerReady
@@ -41,9 +46,12 @@ export function createLobbyService(): LobbyService {
       hostId: hostPlayer.id,
       captains: { ...EMPTY_CAPTAINS },
       teamNames: { ...DEFAULT_TEAM_NAMES },
-      settings: { ...DEFAULT_GAME_SETTINGS }
+      settings: { ...DEFAULT_GAME_SETTINGS },
+      playerStats: {},
+      lastTouchPlayerId: null
     };
 
+    syncCaptains(lobby);
     lobbies.set(lobby.code, lobby);
     return lobby;
   }
@@ -60,12 +68,14 @@ export function createLobbyService(): LobbyService {
     }
 
     lobby.players.push(createPlayer(playerName, joinChoice));
+    syncCaptains(lobby);
     return lobby;
   }
 
   function getLobby(code: string): Lobby {
     const lobby = getStoredLobby(code);
 
+    syncCaptains(lobby);
     finishMatchIfExpired(lobby, Date.now());
     return lobby;
   }
@@ -85,6 +95,7 @@ export function createLobbyService(): LobbyService {
 
     assertMatchActive(lobby, scoredAt);
     lobby.score[team] += 1;
+    recordGoalStats(lobby, team);
 
     if (isTargetScoreReached(lobby, team)) {
       finishMatch(lobby, "target-score", team, scoredAt);
@@ -99,7 +110,33 @@ export function createLobbyService(): LobbyService {
     lobby.score = { ...EMPTY_SCORE };
 
     if (lobby.assignments) {
+      initializePlayerStats(lobby);
+      lobby.lastTouchPlayerId = null;
+      lobbyLastCountedTouch.delete(code);
       lobby.match = createActiveMatch(lobby.settings, Date.now());
+    }
+
+    return lobby;
+  }
+
+  function returnToWaitingRoom(code: string, playerId: string): Lobby {
+    const lobby = getLobby(code);
+
+    findPlayer(lobby, playerId);
+
+    if (lobby.match?.status !== "finished") {
+      throw new AppError(400, "Match must be finished before returning to the waiting room");
+    }
+
+    lobby.score = { ...EMPTY_SCORE };
+    lobby.match = undefined;
+    lobby.assignments = undefined;
+    lobby.playerStats = {};
+    lobby.lastTouchPlayerId = null;
+    lobbyLastCountedTouch.delete(code);
+
+    for (const player of lobby.players) {
+      player.ready = false;
     }
 
     return lobby;
@@ -116,12 +153,12 @@ export function createLobbyService(): LobbyService {
     const lobby = getLobby(code);
     const player = findPlayer(lobby, update.playerId);
 
-    if ((update.captains || update.settings) && player.id !== lobby.hostId) {
-      throw new AppError(403, "Only the host can update captains or match rules");
+    if (update.captains) {
+      throw new AppError(403, "Captains are assigned automatically");
     }
 
-    if (update.captains) {
-      lobby.captains = getUpdatedCaptains(lobby, update.captains);
+    if (update.settings && player.id !== lobby.hostId) {
+      throw new AppError(403, "Only the host can update match rules");
     }
 
     if (update.settings) {
@@ -143,9 +180,40 @@ export function createLobbyService(): LobbyService {
 
     if (!lobby.assignments && isReadyToStart(lobby)) {
       lobby.assignments = assignSoccerTeams(lobby);
+      initializePlayerStats(lobby);
+      lobby.lastTouchPlayerId = null;
+      lobbyLastCountedTouch.delete(code);
       lobby.match = createActiveMatch(lobby.settings, Date.now());
     }
 
+    return lobby;
+  }
+
+  function recordBallTouch(code: string, playerId: string, touchedAt = Date.now()): Lobby {
+    const lobby = getStoredLobby(code);
+
+    assertMatchActive(lobby, touchedAt);
+
+    const assignment = findAssignment(lobby, playerId);
+    const lastCountedTouch = lobbyLastCountedTouch.get(code);
+
+    lobby.lastTouchPlayerId = playerId;
+
+    if (lastCountedTouch?.playerId === playerId && touchedAt - lastCountedTouch.touchedAt < 300) {
+      return lobby;
+    }
+
+    const stats = getStats(lobby, playerId);
+
+    if (assignment.role === "goalkeeper") {
+      stats.blocks += 1;
+      stats.points += 3;
+    } else {
+      stats.kicks += 1;
+      stats.points += 1;
+    }
+
+    lobbyLastCountedTouch.set(code, { playerId, touchedAt });
     return lobby;
   }
 }
@@ -159,6 +227,16 @@ function createActiveMatch(settings: GameSettings, now: number): MatchState {
     winner: null,
     finishReason: null
   };
+}
+
+function syncCaptains(lobby: Lobby): void {
+  const players = lobby.players.filter((player) => player.joinChoice !== "spectator");
+  const nextCaptains: Captains = {
+    team1: players[0]?.id ?? null,
+    team2: players[1]?.id ?? null
+  };
+
+  lobby.captains = nextCaptains;
 }
 
 function assertMatchActive(lobby: Lobby, now: number): void {
@@ -191,6 +269,82 @@ function finishMatch(lobby: Lobby, finishReason: MatchFinishReason, winner: Team
     winner,
     finishReason
   };
+}
+
+function initializePlayerStats(lobby: Lobby): void {
+  const playerStats: Record<string, PlayerStats> = {};
+
+  for (const assignment of lobby.assignments ?? []) {
+    playerStats[assignment.id] = createPlayerStats(assignment.id);
+  }
+
+  lobby.playerStats = playerStats;
+}
+
+function createPlayerStats(playerId: string): PlayerStats {
+  return {
+    playerId,
+    kicks: 0,
+    blocks: 0,
+    goals: 0,
+    ownGoals: 0,
+    points: 0
+  };
+}
+
+function recordGoalStats(lobby: Lobby, scoringTeam: TeamSide): void {
+  const playerId = lobby.lastTouchPlayerId;
+
+  if (!playerId) {
+    return;
+  }
+
+  const assignment = lobby.assignments?.find((entry) => entry.id === playerId);
+
+  if (!assignment) {
+    lobby.lastTouchPlayerId = null;
+    return;
+  }
+
+  const stats = getStats(lobby, playerId);
+
+  if (getTeamSide(assignment.team) === scoringTeam) {
+    stats.goals += 1;
+    stats.points += 5;
+    lobby.lastTouchPlayerId = null;
+    return;
+  }
+
+  stats.ownGoals += 1;
+  stats.points -= 5;
+  lobby.lastTouchPlayerId = null;
+}
+
+function getStats(lobby: Lobby, playerId: string): PlayerStats {
+  const existingStats = lobby.playerStats[playerId];
+
+  if (existingStats) {
+    return existingStats;
+  }
+
+  const nextStats = createPlayerStats(playerId);
+
+  lobby.playerStats[playerId] = nextStats;
+  return nextStats;
+}
+
+function findAssignment(lobby: Lobby, playerId: string): AssignedPlayer {
+  const assignment = lobby.assignments?.find((entry) => entry.id === playerId);
+
+  if (!assignment) {
+    throw new AppError(404, "Player assignment not found");
+  }
+
+  return assignment;
+}
+
+function getTeamSide(playerTeam: PlayerTeam): TeamSide {
+  return playerTeam === TEAM_CONFIG.team1.playerTeam ? "team1" : "team2";
 }
 
 function isTargetScoreReached(lobby: Lobby, scoringTeam: TeamSide): boolean {
@@ -305,8 +459,8 @@ function getUpdatedTeamNames(lobby: Lobby, playerId: string, teamNames: Partial<
 }
 
 function assertCanRenameTeam(lobby: Lobby, playerId: string, team: TeamSide): void {
-  if (playerId !== lobby.hostId && playerId !== lobby.captains[team]) {
-    throw new AppError(403, "Only the host or that team's captain can rename a team");
+  if (playerId !== lobby.captains[team]) {
+    throw new AppError(403, "Only that team's captain can rename the team");
   }
 }
 

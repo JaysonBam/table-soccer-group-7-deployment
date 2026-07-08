@@ -150,7 +150,24 @@ export function createLobbySocketServer(server: Server, lobbyService: LobbyServi
 
   function broadcastLobby(lobby: Lobby): void {
     scheduleMatchFinish(lobby);
+    clearBallStateIfWaiting(lobby);
     broadcastToLobby(lobby.code, { type: "lobby", lobby });
+  }
+
+  function clearBallStateIfWaiting(lobby: Lobby): void {
+    if (lobby.assignments) {
+      return;
+    }
+
+    const existingTimer = lobbyBallTimers.get(lobby.code);
+
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    lobbyBallTimers.delete(lobby.code);
+    lobbyBallStates.delete(lobby.code);
+    lobbyLastKickAt.delete(lobby.code);
   }
 
   function startBallIfNeeded(lobby: Lobby): void {
@@ -347,6 +364,7 @@ export function createLobbySocketServer(server: Server, lobbyService: LobbyServi
     }
 
     lobbyLastKickAt.set(connection.lobbyCode, now);
+    lobbyService.recordBallTouch(connection.lobbyCode, closestPlayer.id, kickTimestamp);
     publishBallState(connection.lobbyCode, nextBallState);
   }
 

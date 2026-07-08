@@ -32,6 +32,15 @@ export type Score = Record<TeamSide, number>;
 export type TeamNames = Record<TeamSide, string>;
 export type Captains = Record<TeamSide, string | null>;
 
+export type PlayerStats = {
+  playerId: string;
+  kicks: number;
+  blocks: number;
+  goals: number;
+  ownGoals: number;
+  points: number;
+};
+
 export type GameSettings = {
   mode: WinMode;
   winTarget: number;
@@ -64,6 +73,8 @@ export type Lobby = {
   captains: Captains;
   teamNames: TeamNames;
   settings: GameSettings;
+  playerStats: Record<string, PlayerStats>;
+  lastTouchPlayerId: string | null;
   match?: MatchState;
   assignments?: AssignedPlayer[];
 };

@@ -1,6 +1,5 @@
 import "./style.css";
-import { createLobby, joinLobby } from "./api";
-import { resetDiagnostics } from "./diagnostics";
+import { createLobby, joinLobby, returnLobbyToWaitingRoom } from "./api";
 import { connectLobbySocket, type LobbySocketConnection } from "./lobbySocket";
 import { saveStoredClientName } from "./storage";
 import { createHomeView } from "./views/homeView";
@@ -144,7 +143,10 @@ function showGamePage(): void {
     onGoalUpdater: (updater) => {
       updateGameGoal = updater;
     },
-    onOpenLobby: showHomeView
+    onOpenLobby: showHomeView,
+    onLeaveLobby: () => showHomeView("You left the lobby."),
+    onMainScreen: showPitchPreview,
+    onBackToWaitingRoom: handleBackToWaitingRoom
   });
 }
 
@@ -176,7 +178,6 @@ function enterLobby(lobby: Lobby, data: LobbyRequest): void {
   currentPerson = createClientPerson(lobby, data.personName, data.joinChoice);
   currentPositions = {};
   currentBallState = null;
-  resetDiagnostics(currentLobby, currentPerson);
   connectCurrentLobbySocket();
   saveStoredClientName(currentPerson.name);
   showWaitingRoom();
@@ -235,6 +236,13 @@ function handleSocketLobby(lobby: Lobby): void {
       updateGameLobby?.(lobby);
     }
 
+    return;
+  }
+
+  if (currentView === "game") {
+    currentPositions = {};
+    currentBallState = null;
+    showWaitingRoom();
     return;
   }
 
@@ -302,6 +310,28 @@ function handleLocalPositionChange(position: number): void {
     [currentPerson.id]: position
   };
   currentLobbySocket?.sendPosition(position);
+}
+
+async function handleBackToWaitingRoom(): Promise<void> {
+  if (!currentLobby || !currentPerson) {
+    showHomeView("Lobby data was missing");
+    return;
+  }
+
+  try {
+    const lobby = await returnLobbyToWaitingRoom(currentLobby.code, currentPerson.id);
+
+    currentLobby = lobby;
+    currentPerson = {
+      ...currentPerson,
+      ready: false
+    };
+    currentPositions = {};
+    currentBallState = null;
+    showWaitingRoom();
+  } catch (error) {
+    handleSocketError(getErrorMessage(error));
+  }
 }
 
 function handleSocketError(message: string): void {
@@ -408,10 +438,6 @@ function closeLobbySocket(): void {
   clearSocketReconnect();
   currentLobbySocket?.close();
   currentLobbySocket = null;
-  updateGamePosition = null;
-  updateGameCheer = null;
-  updateGameBallState = null;
-  updateGameLobby = null;
 }
 
 function cleanupRenderedPage(): void {
@@ -419,6 +445,7 @@ function cleanupRenderedPage(): void {
   updateGameCheer = null;
   updateGameBallState = null;
   updateGameLobby = null;
+  updateGameGoal = null;
   cleanupCurrentPage?.();
   cleanupCurrentPage = null;
 }

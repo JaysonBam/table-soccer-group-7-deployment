@@ -1,20 +1,4 @@
 import { canUseGyroControl, initGyroControl, initKeyboardFallback, needsGyroPermission, stopGyroControl } from "../game/gyro-control";
-import {
-  createDiagnosticsReport,
-  formatDiagnosticsReport,
-  recordDragEnd,
-  recordDragStart,
-  recordFrame,
-  recordKick,
-  recordLayoutRead,
-  recordLocalPositionSend,
-  recordLocalPositionUpdate,
-  recordPointerDown,
-  recordPointerMove,
-  recordRemotePositionUpdate,
-  recordStyleWrite,
-  recordTouchMove
-} from "../diagnostics";
 import type {
   AssignedFoosballPlayer,
   BallMovementState,
@@ -24,6 +8,7 @@ import type {
   KickRequest,
   Lobby,
   MatchState,
+  PlayerStats,
   TeamSide,
   Vector2D
 } from "../types";
@@ -42,6 +27,9 @@ type PitchViewHandlers = {
   onLobbyUpdater?: (updater: ((lobby: Lobby) => void) | null) => void;
   onGoalUpdater?: (updater: ((scoringTeam: TeamSide) => void) | null) => void;
   onOpenLobby?: () => void;
+  onLeaveLobby?: () => void;
+  onMainScreen?: () => void;
+  onBackToWaitingRoom?: () => void | Promise<void>;
 };
 
 type PlayerMarkerState = {
@@ -77,6 +65,7 @@ const KICKOFF_COUNTDOWN_MS = 3000;
 const MIN_KICK_SWIPE_DISTANCE = 24;
 const POSITION_SEND_INTERVAL_MS = 50;
 const POSITION_SEND_EPSILON = 0.015;
+const GYRO_RENDER_EASE = 0.25;
 
 export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers = {}): () => void {
   const listenerController = new AbortController();
@@ -109,12 +98,13 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   let activeSwipe: SwipePointerState | null = null;
   let activeDrag: DragPointerState | null = null;
   let motionPermissionPrompt: HTMLDivElement | null = null;
-  let diagnosticsPanel: HTMLDivElement | null = null;
   let ballAnimationFrame = 0;
   let serverClockOffsetMs = 0;
   let currentControlledPosition = Number.NaN;
   let lastSentPosition = Number.NaN;
   let lastSentAt = 0;
+  let gyroTargetPosition = Number.NaN;
+  let gyroRenderFrame = 0;
   let team1ScoreValue = handlers.lobby?.score.team1 ?? 0;
   let team2ScoreValue = handlers.lobby?.score.team2 ?? 0;
   let lobbyData: Lobby | null = handlers.lobby ?? null;
@@ -127,6 +117,8 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   let team2CheerCount = 0;
   let goalFlashTimeout: number | undefined;
   let kickoffCountdownInterval: number | undefined;
+  let gameOverModal: HTMLDivElement | null = null;
+  let backToWaitingClicked = false;
   const isSpectator = handlers.currentPerson?.type === "spectator";
   const isTeam2View = handlers.currentPerson?.type === "team2Player";
 
@@ -176,7 +168,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     const marker = markerByPlayerId.get(playerId);
 
     if (marker) {
-      recordRemotePositionUpdate();
       setMarkerHorizontalPosition(marker, position);
     }
   });
@@ -191,11 +182,8 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
 
   updateScoreboard();
   updateMatchMeta();
+  updateGameOverModal();
   startTimer();
-
-  if (matchFinished) {
-    showDiagnosticsPage();
-  }
 
   const stopKeyboardFallback = controlledMarker ? initKeyboardFallback(updateScreenAxisPlayerPosition) : () => undefined;
 
@@ -206,6 +194,8 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   return () => {
     listenerController.abort();
     stopTimer();
+    gameOverModal?.remove();
+    gameOverModal = null;
     handlers.onPositionUpdater?.(null);
     handlers.onCheerUpdater?.(null);
     handlers.onBallStateUpdater?.(null);
@@ -213,9 +203,9 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     handlers.onGoalUpdater?.(null);
     window.clearTimeout(goalFlashTimeout);
     window.clearInterval(kickoffCountdownInterval);
-    diagnosticsPanel?.remove();
     cancelAnimationFrame(ballAnimationFrame);
     stopDragPositionStream();
+    stopGyroRenderLoop();
     dismissMotionPermissionPrompt();
     stopKeyboardFallback();
     stopGyroControl();
@@ -236,10 +226,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     matchFinished = matchState?.status === "finished";
     updateScoreboard();
     updateMatchMeta();
-
-    if (matchFinished) {
-      showDiagnosticsPage();
-    }
+    updateGameOverModal();
 
     if (matchState?.status === "active") {
       startTimer();
@@ -247,6 +234,116 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     }
 
     stopTimer();
+  }
+
+  function updateGameOverModal(): void {
+    if (!lobbyData || matchState?.status !== "finished") {
+      gameOverModal?.remove();
+      gameOverModal = null;
+      return;
+    }
+
+    if (!gameOverModal) {
+      gameOverModal = createGameOverModal();
+      screen.querySelector<HTMLElement>(".pitch-shell")!.append(gameOverModal);
+    }
+
+    renderGameOverModal(gameOverModal, lobbyData);
+  }
+
+  function createGameOverModal(): HTMLDivElement {
+    const overlay = document.createElement("div");
+
+    overlay.className = "game-over-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Game Over");
+    return overlay;
+  }
+
+  function renderGameOverModal(overlay: HTMLDivElement, lobby: Lobby): void {
+    const mvp = getMvpPlayer(lobby);
+    const winnerName = getWinnerName();
+    const title = document.createElement("h2");
+    const finalScore = document.createElement("p");
+    const winner = document.createElement("p");
+    const mvpSummary = document.createElement("p");
+    const explanation = document.createElement("p");
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    const tbody = document.createElement("tbody");
+    const actions = document.createElement("p");
+    const leaveButton = document.createElement("button");
+    const mainButton = document.createElement("button");
+    const waitingButton = document.createElement("button");
+
+    title.textContent = "Game Over";
+    finalScore.className = "game-over-score";
+    finalScore.textContent = `${lobby.teamNames.team1} ${lobby.score.team1} - ${lobby.score.team2} ${lobby.teamNames.team2}`;
+    winner.className = "game-over-winner";
+    winner.textContent = winnerName === "Draw" ? "Result: Draw" : `Winner: ${winnerName}`;
+    mvpSummary.className = "game-over-mvp";
+    mvpSummary.textContent = mvp ? `MVP: ${mvp.assignment.name} (${mvp.stats.points} points)` : "MVP: No touches recorded";
+    explanation.className = "game-over-note";
+    explanation.textContent = "MVP/stat points only. They do not affect the match score. Kick +1 - Block +3 - Goal +5 - Own goal -5";
+
+    thead.innerHTML = `
+      <tr>
+        <th>Name</th>
+        <th>Team</th>
+        <th>Role</th>
+        <th>Kicks</th>
+        <th>Blocks</th>
+        <th>Goals</th>
+        <th>Own goals</th>
+        <th>Points</th>
+      </tr>
+    `;
+
+    for (const row of getStatRows(lobby)) {
+      const tr = document.createElement("tr");
+
+      tr.className = row.assignment.id === mvp?.assignment.id ? "is-mvp" : "";
+      tr.innerHTML = `
+        <td>${escapeHtml(row.assignment.name)}</td>
+        <td>${escapeHtml(getTeamName(lobby, row.assignment.team))}</td>
+        <td>${getRoleLabel(row.assignment.role)}</td>
+        <td>${row.stats.kicks}</td>
+        <td>${row.stats.blocks}</td>
+        <td>${row.stats.goals}</td>
+        <td>${row.stats.ownGoals}</td>
+        <td>${row.stats.points}</td>
+      `;
+      tbody.append(tr);
+    }
+
+    table.className = "game-over-stats";
+    table.append(thead, tbody);
+    actions.className = "game-over-actions";
+    leaveButton.className = "pitch-action";
+    leaveButton.type = "button";
+    leaveButton.textContent = "Leave Lobby";
+    leaveButton.addEventListener("click", () => handlers.onLeaveLobby?.(), { signal: listenerController.signal });
+    mainButton.className = "pitch-action";
+    mainButton.type = "button";
+    mainButton.textContent = "Main Screen";
+    mainButton.addEventListener("click", () => handlers.onMainScreen?.(), { signal: listenerController.signal });
+    waitingButton.className = "pitch-action";
+    waitingButton.type = "button";
+    waitingButton.textContent = backToWaitingClicked ? "Returning..." : "Back to Waiting Room";
+    waitingButton.disabled = backToWaitingClicked;
+    waitingButton.addEventListener("click", () => {
+      if (backToWaitingClicked) {
+        return;
+      }
+
+      backToWaitingClicked = true;
+      waitingButton.textContent = "Returning...";
+      waitingButton.disabled = true;
+      void handlers.onBackToWaitingRoom?.();
+    }, { signal: listenerController.signal });
+    actions.append(leaveButton, mainButton, waitingButton);
+    overlay.replaceChildren(title, finalScore, winner, mvpSummary, explanation, table, actions);
   }
 
   function stopTimer(): void {
@@ -263,7 +360,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     const seconds = remainingSeconds % 60;
     const timeText = `${minutes}:${seconds.toString().padStart(2, "0")}`;
 
-    timerLabel.textContent = `Time ${timeText}`;
+    timerLabel.textContent = `${timeText}`;
     winLabel.textContent = winText;
     team1Name.textContent = lobbyData?.teamNames.team1 ?? "Team 1";
     team2Name.textContent = lobbyData?.teamNames.team2 ?? "Team 2";
@@ -338,14 +435,53 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
 
     const clampedTilt = Math.max(-1, Math.min(1, tilt));
 
-    recordLocalPositionUpdate();
     currentControlledPosition = clampedTilt;
     setMarkerHorizontalPosition(controlledMarker.element, clampedTilt);
     sendControlledPosition(clampedTilt, forceSend);
   }
 
   function updateScreenAxisPlayerPosition(tilt: number, forceSend = false): void {
-    updatePlayerPosition(isTeam2View ? -tilt : tilt, forceSend);
+    updatePlayerPosition(toScreenAxisPosition(tilt), forceSend);
+  }
+
+  function toScreenAxisPosition(tilt: number): number {
+    return isTeam2View ? -tilt : tilt;
+  }
+
+  function updateGyroPosition(tilt: number): void {
+    gyroTargetPosition = toScreenAxisPosition(tilt);
+    ensureGyroRenderLoop();
+  }
+
+  // iOS dispatches deviceorientation far less often/regularly than Android, so driving the
+  // marker straight off each event (as keyboard/drag do) looks stepped. Render every animation
+  // frame instead and ease toward the latest sensor reading, independent of event rate.
+  function ensureGyroRenderLoop(): void {
+    if (gyroRenderFrame) {
+      return;
+    }
+
+    const renderGyroPosition = (): void => {
+      if (!controlledMarker || Number.isNaN(gyroTargetPosition)) {
+        gyroRenderFrame = 0;
+        return;
+      }
+
+      const easedPosition = Number.isNaN(currentControlledPosition)
+        ? gyroTargetPosition
+        : currentControlledPosition + (gyroTargetPosition - currentControlledPosition) * GYRO_RENDER_EASE;
+
+      updatePlayerPosition(easedPosition);
+      gyroRenderFrame = requestAnimationFrame(renderGyroPosition);
+    };
+
+    gyroRenderFrame = requestAnimationFrame(renderGyroPosition);
+  }
+
+  function stopGyroRenderLoop(): void {
+    cancelAnimationFrame(gyroRenderFrame);
+    gyroRenderFrame = 0;
+    gyroTargetPosition = Number.NaN;
   }
 
   async function startGyro(): Promise<void> {
@@ -353,7 +489,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       return;
     }
 
-    const motionResult = await initGyroControl(updateScreenAxisPlayerPosition);
+    const motionResult = await initGyroControl(updateGyroPosition);
 
     if (motionResult.started) {
       motionButton.hidden = true;
@@ -413,7 +549,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
 
     lastSentPosition = position;
     lastSentAt = now;
-    recordLocalPositionSend();
     handlers.onPositionChange?.(position);
   }
 
@@ -428,8 +563,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function handleKickPointerDown(event: PointerEvent): void {
-    recordPointerDown();
-
     if (!controlledMarker || isSpectator || matchFinished) {
       return;
     }
@@ -443,7 +576,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
         animationFrame: 0
       };
       boundary.setPointerCapture(event.pointerId);
-      recordDragStart();
       updateControlledPositionFromPointer(event, true);
       startDragPositionStream();
       event.preventDefault();
@@ -466,8 +598,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function handleKickPointerMove(event: PointerEvent): void {
-    recordPointerMove();
-
     if (activeDrag?.pointerId === event.pointerId) {
       updateControlledPositionFromPointer(event);
       event.preventDefault();
@@ -492,7 +622,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   function handleKickPointerEnd(event: PointerEvent): void {
     if (activeDrag?.pointerId === event.pointerId) {
       updateControlledPositionFromPointer(event, true);
-      recordDragEnd();
       stopDragPositionStream();
       releasePointerCapture(event.pointerId);
       event.preventDefault();
@@ -514,7 +643,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     releasePointerCapture(event.pointerId);
 
     if (kickRequest) {
-      recordKick();
       handlers.onKick?.(kickRequest);
     }
   }
@@ -587,8 +715,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function handleDragTouchMove(event: TouchEvent): void {
-    recordTouchMove();
-
     if (!activeDrag || event.touches.length === 0) {
       return;
     }
@@ -602,7 +728,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function getPositionFromClientPoint(clientX: number, clientY: number): number {
-    recordLayoutRead();
     const bounds = boundary.getBoundingClientRect();
     const usesHorizontalScreenAxis = window.matchMedia("(orientation: portrait) and (max-width: 900px)").matches;
     const pointerOffset = usesHorizontalScreenAxis
@@ -619,7 +744,10 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function updateCheerCounts(): void {
-    cheerCounts.textContent = `Team 1 cheers: ${team1CheerCount} | Team 2 cheers: ${team2CheerCount}`;
+    cheerCounts.innerHTML = `
+      <span class="cheer-badge cheer-team1"><span class="emoji">🔥</span><span class="count">${team1CheerCount}</span></span>
+      <span class="cheer-badge cheer-team2"><span class="emoji">🖤</span><span class="count">${team2CheerCount}</span></span>
+    `;
   }
 
   function playCheerBurst(team: FoosballTeam): void {
@@ -701,64 +829,11 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       visualBallPosition = visualBallPosition
         ? interpolateVector(visualBallPosition, targetPosition, 0.35)
         : targetPosition;
-      recordFrame();
       setBallPosition(ball, latestBallState, visualBallPosition);
       ballAnimationFrame = requestAnimationFrame(renderBall);
     };
 
     ballAnimationFrame = requestAnimationFrame(renderBall);
-  }
-
-  function showDiagnosticsPage(): void {
-    if (diagnosticsPanel) {
-      return;
-    }
-
-    const report = createDiagnosticsReport(lobbyData, handlers.currentPerson);
-    const formattedReport = formatDiagnosticsReport(report);
-    const panel = document.createElement("div");
-    const heading = document.createElement("h2");
-    const intro = document.createElement("p");
-    const notes = document.createElement("ul");
-    const actions = document.createElement("p");
-    const copyButton = document.createElement("button");
-    const closeButton = document.createElement("button");
-    const copyStatus = document.createElement("span");
-    const json = document.createElement("pre");
-
-    panel.className = "diagnostics-page";
-    panel.setAttribute("role", "dialog");
-    panel.setAttribute("aria-label", "Temporary diagnostics report");
-    heading.textContent = "Temporary diagnostics report";
-    intro.textContent = "Compare this report between a smooth phone and a laggy phone after the same match.";
-    notes.className = "diagnostics-notes";
-
-    for (const note of report.notes) {
-      const item = document.createElement("li");
-
-      item.textContent = note;
-      notes.append(item);
-    }
-
-    actions.className = "diagnostics-actions";
-    copyButton.className = "pitch-action";
-    copyButton.type = "button";
-    copyButton.textContent = "Copy JSON";
-    copyButton.addEventListener("click", () => {
-      void copyDiagnosticsReport(formattedReport, copyStatus);
-    });
-    closeButton.className = "pitch-action";
-    closeButton.type = "button";
-    closeButton.textContent = "Close report";
-    closeButton.addEventListener("click", () => panel.remove());
-    copyStatus.className = "diagnostics-copy-status";
-    actions.append(copyButton, closeButton, copyStatus);
-
-    json.className = "diagnostics-json";
-    json.textContent = formattedReport;
-    panel.append(heading, intro, notes, actions, json);
-    screen.append(panel);
-    diagnosticsPanel = panel;
   }
 }
 
@@ -868,17 +943,7 @@ function createGameplayPlayerElement(assignment: AssignedFoosballPlayer, isContr
 function setMarkerHorizontalPosition(marker: HTMLDivElement, value: number): void {
   const clampedValue = Math.max(-MAX_AUTONOMOUS_X, Math.min(MAX_AUTONOMOUS_X, value));
 
-  recordStyleWrite();
   marker.style.setProperty("--player-x", `${clampedValue * PLAYER_X_RANGE_PERCENT}%`);
-}
-
-async function copyDiagnosticsReport(report: string, status: HTMLElement): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(report);
-    status.textContent = "Copied";
-  } catch {
-    status.textContent = "Copy unavailable";
-  }
 }
 
 function getPredictedBallPosition(ballState: BallMovementState, serverClockOffsetMs: number): Vector2D {
@@ -961,6 +1026,67 @@ function getMotionFailureMessage(reason: "unsupported" | "permission-denied" | "
   }
 
   return "This browser does not support tilt controls. Drag your highlighted player to move.";
+}
+
+type StatRow = {
+  assignment: AssignedFoosballPlayer;
+  stats: PlayerStats;
+};
+
+function getStatRows(lobby: Lobby): StatRow[] {
+  return (lobby.assignments ?? []).map((assignment) => ({
+    assignment,
+    stats: lobby.playerStats[assignment.id] ?? createEmptyStats(assignment.id)
+  }));
+}
+
+function getMvpPlayer(lobby: Lobby): StatRow | null {
+  const rows = getStatRows(lobby).filter(hasRecordedStats);
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return rows.sort(compareMvpRows)[0];
+}
+
+function hasRecordedStats(row: StatRow): boolean {
+  return row.stats.kicks > 0
+    || row.stats.blocks > 0
+    || row.stats.goals > 0
+    || row.stats.ownGoals > 0;
+}
+
+function compareMvpRows(first: StatRow, second: StatRow): number {
+  return second.stats.points - first.stats.points
+    || second.stats.goals - first.stats.goals
+    || second.stats.blocks - first.stats.blocks
+    || second.stats.kicks - first.stats.kicks
+    || first.stats.ownGoals - second.stats.ownGoals
+    || first.assignment.name.localeCompare(second.assignment.name)
+    || first.assignment.id.localeCompare(second.assignment.id);
+}
+
+function createEmptyStats(playerId: string): PlayerStats {
+  return {
+    playerId,
+    kicks: 0,
+    blocks: 0,
+    goals: 0,
+    ownGoals: 0,
+    points: 0
+  };
+}
+
+function getTeamName(lobby: Lobby, team: FoosballTeam): string {
+  return team === "team1Player" ? lobby.teamNames.team1 : lobby.teamNames.team2;
+}
+
+function escapeHtml(value: string): string {
+  const element = document.createElement("span");
+
+  element.textContent = value;
+  return element.innerHTML;
 }
 
 function getRoleLabel(role: FoosballRole): string {

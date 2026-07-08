@@ -17,15 +17,18 @@
           <p class="control-status" data-control-status hidden></p>
 
           <section class="scoreboard" aria-live="polite" role="status">
-            <p class="scoreboard-title">Score</p>
+            <span data-timer-label></span>
             <p class="scoreboard-team scoreboard-team-left">
-              <span class="scoreboard-team-name" data-team1-name>Team 1</span>
-              <strong class="scoreboard-score" data-team1-score>0</strong>
+              <span class="scoreboard-team-name" data-team1-name></span>
+              <strong class="scoreboard-score" data-team1-score></strong>
             </p>
             <p class="scoreboard-team scoreboard-team-right">
-              <span class="scoreboard-team-name" data-team2-name>Team 2</span>
-              <strong class="scoreboard-score" data-team2-score>0</strong>
+              <strong class="scoreboard-score" data-team2-score></strong>
+              <span class="scoreboard-team-name" data-team2-name></span>
+              
             </p>
+            <span data-win-label></span>
+            <span data-status-label></span>
           </section>
 
           <section class="pitch-card" aria-label="Pitch">
@@ -63,13 +66,7 @@
             <p class="goal-flash" data-goal-flash>Goal</p>
             <p class="kickoff-countdown" data-kickoff-countdown></p>
 
-            <p class="match-status">
-              <span class="match-status-pill">
-                <span data-timer-label></span>
-                <span data-win-label></span>
-                <span data-status-label></span>
-              </span>
-            </p>
+            
           </section>
 
           <p class="cheer-row" data-cheer-row hidden>
@@ -77,7 +74,7 @@
             <button type="button" class="pitch-action cheer-team2" data-cheer-team2-button>Cheer Team 2</button>
           </p>
 
-          <p class="cheer-counts" data-cheer-counts hidden></p>
+          <p class="cheer-counts" data-cheer-counts></p>
 
         </section>
       </section>
