@@ -118,7 +118,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   let team2CheerCount = 0;
   let goalFlashTimeout: number | undefined;
   let kickoffCountdownInterval: number | undefined;
-  let lastWhistleSequence = -1;
   let gameOverModal: HTMLDivElement | null = null;
   let backToWaitingClicked = false;
   const isSpectator = handlers.currentPerson?.type === "spectator";
@@ -777,11 +776,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     startBallAnimation();
 
     if (ballState.reason === "kickoff-pause") {
-      if (ballState.sequence !== lastWhistleSequence) {
-        playWhistle();
-        lastWhistleSequence = ballState.sequence;
-      }
-
       startKickoffCountdown(ballState);
     } else {
       stopKickoffCountdown();
@@ -797,6 +791,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       const remainingMs = KICKOFF_COUNTDOWN_MS - elapsedMs;
 
       if (remainingMs <= 0) {
+        playWhistle();
         stopKickoffCountdown();
         return;
       }
