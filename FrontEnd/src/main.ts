@@ -145,7 +145,6 @@ function showGamePage(): void {
     },
     onOpenLobby: showHomeView,
     onLeaveLobby: () => showHomeView("You left the lobby."),
-    onMainScreen: showPitchPreview,
     onBackToWaitingRoom: handleBackToWaitingRoom
   });
 }

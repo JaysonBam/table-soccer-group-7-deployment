@@ -28,7 +28,6 @@ type PitchViewHandlers = {
   onGoalUpdater?: (updater: ((scoringTeam: TeamSide) => void) | null) => void;
   onOpenLobby?: () => void;
   onLeaveLobby?: () => void;
-  onMainScreen?: () => void;
   onBackToWaitingRoom?: () => void | Promise<void>;
 };
 
@@ -263,32 +262,32 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
 
   function renderGameOverModal(overlay: HTMLDivElement, lobby: Lobby): void {
     const mvp = getMvpPlayer(lobby);
-    const winnerName = getWinnerName();
+    const rankedRows = getRankedStatRows(lobby);
+    const winnerText = getFinalScoreText(lobby);
+    const card = document.createElement("section");
     const title = document.createElement("h2");
     const finalScore = document.createElement("p");
-    const winner = document.createElement("p");
     const mvpSummary = document.createElement("p");
-    const explanation = document.createElement("p");
+    const legend = document.createElement("p");
     const table = document.createElement("table");
     const thead = document.createElement("thead");
     const tbody = document.createElement("tbody");
     const actions = document.createElement("p");
     const leaveButton = document.createElement("button");
-    const mainButton = document.createElement("button");
     const waitingButton = document.createElement("button");
 
+    card.className = "game-over-card";
     title.textContent = "Game Over";
     finalScore.className = "game-over-score";
-    finalScore.textContent = `${lobby.teamNames.team1} ${lobby.score.team1} - ${lobby.score.team2} ${lobby.teamNames.team2}`;
-    winner.className = "game-over-winner";
-    winner.textContent = winnerName === "Draw" ? "Result: Draw" : `Winner: ${winnerName}`;
+    finalScore.textContent = winnerText;
     mvpSummary.className = "game-over-mvp";
-    mvpSummary.textContent = mvp ? `MVP: ${mvp.assignment.name} (${mvp.stats.points} points)` : "MVP: No touches recorded";
-    explanation.className = "game-over-note";
-    explanation.textContent = "MVP/stat points only. They do not affect the match score. Kick +1 - Block +3 - Goal +5 - Own goal -5";
+    mvpSummary.textContent = mvp ? `MVP: ${mvp.assignment.name}` : "MVP: No touches recorded";
+    legend.className = "game-over-legend";
+    legend.textContent = "Kick +1 | Block +3 | Goal +5 | Own Goal -5";
 
     thead.innerHTML = `
       <tr>
+        <th>#</th>
         <th>Name</th>
         <th>Team</th>
         <th>Role</th>
@@ -300,35 +299,33 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       </tr>
     `;
 
-    for (const row of getStatRows(lobby)) {
+    rankedRows.forEach((row, index) => {
       const tr = document.createElement("tr");
+      const rank = index + 1;
 
       tr.className = row.assignment.id === mvp?.assignment.id ? "is-mvp" : "";
       tr.innerHTML = `
-        <td>${escapeHtml(row.assignment.name)}</td>
-        <td>${escapeHtml(getTeamName(lobby, row.assignment.team))}</td>
-        <td>${getRoleLabel(row.assignment.role)}</td>
-        <td>${row.stats.kicks}</td>
-        <td>${row.stats.blocks}</td>
-        <td>${row.stats.goals}</td>
-        <td>${row.stats.ownGoals}</td>
-        <td>${row.stats.points}</td>
+        <td data-label="#">${rank}</td>
+        <td data-label="Name">${escapeHtml(row.assignment.name)}</td>
+        <td data-label="Team">${escapeHtml(getTeamName(lobby, row.assignment.team))}</td>
+        <td data-label="Role">${getRoleLabel(row.assignment.role)}</td>
+        <td data-label="Kicks">${row.stats.kicks}</td>
+        <td data-label="Blocks">${row.stats.blocks}</td>
+        <td data-label="Goals">${row.stats.goals}</td>
+        <td data-label="Own goals">${row.stats.ownGoals}</td>
+        <td data-label="Points">${row.stats.points}</td>
       `;
       tbody.append(tr);
-    }
+    });
 
     table.className = "game-over-stats";
     table.append(thead, tbody);
     actions.className = "game-over-actions";
-    leaveButton.className = "pitch-action";
+    leaveButton.className = "button secondary";
     leaveButton.type = "button";
     leaveButton.textContent = "Leave Lobby";
     leaveButton.addEventListener("click", () => handlers.onLeaveLobby?.(), { signal: listenerController.signal });
-    mainButton.className = "pitch-action";
-    mainButton.type = "button";
-    mainButton.textContent = "Main Screen";
-    mainButton.addEventListener("click", () => handlers.onMainScreen?.(), { signal: listenerController.signal });
-    waitingButton.className = "pitch-action";
+    waitingButton.className = "button primary";
     waitingButton.type = "button";
     waitingButton.textContent = backToWaitingClicked ? "Returning..." : "Back to Waiting Room";
     waitingButton.disabled = backToWaitingClicked;
@@ -342,8 +339,9 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       waitingButton.disabled = true;
       void handlers.onBackToWaitingRoom?.();
     }, { signal: listenerController.signal });
-    actions.append(leaveButton, mainButton, waitingButton);
-    overlay.replaceChildren(title, finalScore, winner, mvpSummary, explanation, table, actions);
+    actions.append(leaveButton, waitingButton);
+    card.append(title, finalScore, mvpSummary, table, legend, actions);
+    overlay.replaceChildren(card);
   }
 
   function stopTimer(): void {
@@ -1040,14 +1038,18 @@ function getStatRows(lobby: Lobby): StatRow[] {
   }));
 }
 
+function getRankedStatRows(lobby: Lobby): StatRow[] {
+  return getStatRows(lobby).sort(compareRankRows);
+}
+
 function getMvpPlayer(lobby: Lobby): StatRow | null {
-  const rows = getStatRows(lobby).filter(hasRecordedStats);
+  const rows = getRankedStatRows(lobby).filter(hasRecordedStats);
 
   if (rows.length === 0) {
     return null;
   }
 
-  return rows.sort(compareMvpRows)[0];
+  return rows[0];
 }
 
 function hasRecordedStats(row: StatRow): boolean {
@@ -1055,6 +1057,14 @@ function hasRecordedStats(row: StatRow): boolean {
     || row.stats.blocks > 0
     || row.stats.goals > 0
     || row.stats.ownGoals > 0;
+}
+
+function compareRankRows(first: StatRow, second: StatRow): number {
+  if (hasRecordedStats(first) !== hasRecordedStats(second)) {
+    return hasRecordedStats(first) ? -1 : 1;
+  }
+
+  return compareMvpRows(first, second);
 }
 
 function compareMvpRows(first: StatRow, second: StatRow): number {
@@ -1080,6 +1090,20 @@ function createEmptyStats(playerId: string): PlayerStats {
 
 function getTeamName(lobby: Lobby, team: FoosballTeam): string {
   return team === "team1Player" ? lobby.teamNames.team1 : lobby.teamNames.team2;
+}
+
+function getFinalScoreText(lobby: Lobby): string {
+  const scoreText = `${lobby.score.team1}-${lobby.score.team2}`;
+
+  if (lobby.match?.winner === "team1") {
+    return `${lobby.teamNames.team1} wins ${scoreText}`;
+  }
+
+  if (lobby.match?.winner === "team2") {
+    return `${lobby.teamNames.team2} wins ${scoreText}`;
+  }
+
+  return `Draw ${scoreText}`;
 }
 
 function escapeHtml(value: string): string {
