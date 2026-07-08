@@ -768,12 +768,18 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       return;
     }
 
+    const wasKickoffPause = latestBallState?.reason === "kickoff-pause";
+
     serverClockOffsetMs = Date.now() - ballState.serverTimestamp;
     latestBallState = ballState;
     ball.hidden = false;
     setBallSize(ball, ballState);
     visualBallPosition ??= getPredictedBallPosition(ballState, serverClockOffsetMs);
     startBallAnimation();
+
+    if (wasKickoffPause && ballState.reason !== "kickoff-pause") {
+      playWhistle();
+    }
 
     if (ballState.reason === "kickoff-pause") {
       startKickoffCountdown(ballState);
@@ -791,7 +797,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       const remainingMs = KICKOFF_COUNTDOWN_MS - elapsedMs;
 
       if (remainingMs <= 0) {
-        playWhistle();
         stopKickoffCountdown();
         return;
       }
