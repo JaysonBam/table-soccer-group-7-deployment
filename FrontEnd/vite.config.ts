@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 
-const BACKEND_TARGET = process.env.VITE_BACKEND_TARGET ?? "http://localhost:3000";
+const BACKEND_TARGET = process.env.VITE_BACKEND_TARGET ?? "https://table-soccer-group-7-server.onrender.com";
 
 export default defineConfig({
   server: {

@@ -28,11 +28,6 @@ type LobbyConnectionRequest = {
   playerId: string;
 };
 
-type KickCandidate = {
-  assignment: AssignedPlayer;
-  distanceSquared: number;
-};
-
 export type LobbySocketServer = {
   broadcastLobby: (lobby: Lobby) => void;
 };
@@ -321,6 +316,12 @@ export function createLobbySocketServer(server: Server, lobbyService: LobbyServi
       return;
     }
 
+    const requesterAssignment = lobby.assignments.find((assignment) => assignment.id === connection.playerId);
+
+    if (!requesterAssignment) {
+      return;
+    }
+
     const lastKickAt = lobbyLastKickAt.get(connection.lobbyCode);
 
     if (lastKickAt !== undefined && now - lastKickAt < SOCCER_KICK_TUNING.cooldownMs) {
@@ -345,7 +346,7 @@ export function createLobbySocketServer(server: Server, lobbyService: LobbyServi
 
     const kickTimestamp = getCompensatedKickTimestamp(message.clientTimestamp, ballState, now);
     const ballPosition = getBallPositionAt(ballState, kickTimestamp);
-    const closestPlayer = findClosestEligibleKickPlayer(lobby, connection.playerId, ballPosition, ballState);
+    const closestPlayer = findClosestEligibleKickPlayer(lobby, requesterAssignment, ballPosition, ballState);
 
     if (!closestPlayer) {
       return;
@@ -387,45 +388,24 @@ export function createLobbySocketServer(server: Server, lobbyService: LobbyServi
 
   function findClosestEligibleKickPlayer(
     lobby: Lobby,
-    playerId: string,
+    requesterAssignment: AssignedPlayer,
     ballPosition: Vector2D,
     ballState: BallMovementState
   ): AssignedPlayer | null {
-    const requesterAssignment = lobby.assignments?.find((assignment) => assignment.id === playerId);
+    const positions = lobbyPositions.get(lobby.code);
+    const kickRadiusSquared = SOCCER_KICK_TUNING.kickRadius * SOCCER_KICK_TUNING.kickRadius;
+    const playerPosition = getAssignedPlayerPosition(
+      requesterAssignment,
+      positions?.get(requesterAssignment.id),
+      ballState
+    );
+    const distanceSquared = getDistanceSquared(ballPosition, playerPosition);
 
-    if (!requesterAssignment || requesterAssignment.team === undefined) {
+    if (distanceSquared > kickRadiusSquared) {
       return null;
     }
 
-    const positions = lobbyPositions.get(lobby.code);
-    const kickRadiusSquared = SOCCER_KICK_TUNING.kickRadius * SOCCER_KICK_TUNING.kickRadius;
-    let bestCandidate: KickCandidate | null = null;
-
-    for (const assignment of lobby.assignments ?? []) {
-      if (assignment.team !== requesterAssignment.team) {
-        continue;
-      }
-
-      const playerPosition = getAssignedPlayerPosition(assignment, positions?.get(assignment.id), ballState);
-      const distanceSquared = getDistanceSquared(ballPosition, playerPosition);
-
-      if (distanceSquared > kickRadiusSquared) {
-        continue;
-      }
-
-      if (
-        !bestCandidate
-        || distanceSquared < bestCandidate.distanceSquared
-        || (distanceSquared === bestCandidate.distanceSquared && assignment.id.localeCompare(bestCandidate.assignment.id) < 0)
-      ) {
-        bestCandidate = {
-          assignment,
-          distanceSquared
-        };
-      }
-    }
-
-    return bestCandidate?.assignment ?? null;
+    return requesterAssignment;
   }
 
   function getAssignedPlayerPosition(

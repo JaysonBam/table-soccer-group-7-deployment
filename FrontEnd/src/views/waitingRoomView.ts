@@ -86,13 +86,12 @@ export function createWaitingRoomView(
 
   timerMinutesInput.addEventListener("change", () => {
     const minutes = clampNumber(Number(timerMinutesInput.value) || 1, 1, 10);
-    const seconds = currentLobby!.settings.timerSeconds % 60;
 
     timerMinutesInput.value = String(minutes);
     void updateLobbySettings(currentLobby!.code, {
       playerId: currentPerson!.id,
       settings: {
-        timerSeconds: minutes * 60 + seconds
+        timerSeconds: minutes * 60
       }
     });
   });
@@ -138,7 +137,7 @@ export function createWaitingRoomView(
     winModeSelect.value = lobby.settings.mode;
     winTargetInput.value = String(lobby.settings.winTarget);
     winTargetInput.max = lobby.settings.mode === "suddenDeath" ? "1" : "9";
-    timerMinutesInput.value = String(Math.floor(lobby.settings.timerSeconds / 60));
+    timerMinutesInput.value = String(Math.max(1, Math.round(lobby.settings.timerSeconds / 60)));
     timerSecondsInput.value = String(lobby.settings.timerSeconds % 60);
 
     captainFields.hidden = true;
@@ -277,7 +276,14 @@ function createDisplayPeople(lobby: Lobby, clientPerson: ClientPerson): DisplayP
 }
 
 function getStartStatus(lobby: Lobby): string | null {
-  const missingPlayers = Math.max(MIN_GAME_PLAYERS - lobby.players.length, 0);
+  const activePlayers = getActivePlayers(lobby.players);
+  const maxGamePlayers = 20;
+
+  if (activePlayers.length > maxGamePlayers) {
+    return `Only ${maxGamePlayers} active players can play at once. Extra joined users should spectate.`;
+  }
+
+  const missingPlayers = Math.max(MIN_GAME_PLAYERS - activePlayers.length, 0);
 
   if (missingPlayers === 0) {
     return null;
@@ -287,8 +293,9 @@ function getStartStatus(lobby: Lobby): string | null {
 }
 
 function getRemainingReadyPlayers(lobby: Lobby): number {
-  const requiredReadyPlayers = Math.ceil(lobby.players.length * 0.5);
-  const readyPlayers = lobby.players.filter((player) => player.ready).length;
+  const activePlayers = getActivePlayers(lobby.players);
+  const requiredReadyPlayers = Math.ceil(activePlayers.length * 0.5);
+  const readyPlayers = activePlayers.filter((player) => player.ready).length;
 
   return Math.max(requiredReadyPlayers - readyPlayers, 0);
 }
@@ -325,4 +332,8 @@ function normalizeWinTarget(value: number): number {
   const clampedValue = clampNumber(value, 1, 9);
 
   return clampedValue % 2 === 0 ? clampedValue - 1 : clampedValue;
+}
+
+function getActivePlayers(players: Player[]): Player[] {
+  return players.filter((player) => player.joinChoice === "player");
 }

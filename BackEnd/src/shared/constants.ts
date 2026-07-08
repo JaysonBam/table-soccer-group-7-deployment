@@ -1,7 +1,7 @@
 // Defines shared constants.
 
 import type { BallFieldDimensions, Captains, GameSettings, Score, TeamNames } from "./types.ts";
-import { TEAM_CONFIG, TEAM_SIDES } from "./types.ts";
+import { TEAM_CONFIG } from "./types.ts";
 
 export const SERVER_HOST = process.env.HOST ?? "0.0.0.0";
 export const SERVER_PORT = Number(process.env.PORT ?? 3000);
@@ -9,7 +9,7 @@ export const TEAM_PLAYER_LIMIT = {
   min: 3,
   max: 10
 } as const;
-export const MAX_LOBBY_PLAYERS = TEAM_PLAYER_LIMIT.max * TEAM_SIDES.length;
+export const MAX_LOBBY_PLAYERS = 40;
 
 export const DEFAULT_GAME_SETTINGS: GameSettings = {
   mode: "firstTo",
@@ -55,7 +55,7 @@ export const SOCCER_KICK_TUNING = {
   maxSwipeDistance: 220,
   maxSwipeVelocity: 1800,
   minKickSpeed: 180,
-  maxKickSpeed: 780,
+  maxKickSpeed: 720,
   kickRadius: 95,
   cooldownMs: 125,
   maxLatencyCompensationMs: 250

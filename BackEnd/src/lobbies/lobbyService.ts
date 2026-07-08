@@ -364,8 +364,10 @@ function getScoreLeader(lobby: Lobby): TeamSide | null {
 function isReadyToStart(lobby: Lobby): boolean {
   const activePlayers = getActivePlayers(lobby.players);
   const minimumReadyPlayers = Math.ceil(activePlayers.length * 0.5);
+  const maximumActivePlayers = TEAM_PLAYER_LIMIT.max * 2;
 
   return activePlayers.length >= TEAM_PLAYER_LIMIT.min * 2
+    && activePlayers.length <= maximumActivePlayers
     && activePlayers.filter((player) => player.ready).length >= minimumReadyPlayers;
 }
 

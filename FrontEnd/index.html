@@ -10,26 +10,27 @@
     <main id="app">
       <section id="pitch-screen" class="page pitch-page">
         <section class="pitch-shell" aria-label="Soccer table">
-          <nav class="pitch-actions" aria-label="Pitch actions">
-            <button type="button" class="pitch-action" data-open-lobby-button>Lobby</button>
-            <button type="button" class="pitch-action" data-motion-button>Enable motion</button>
-          </nav>
-          <p class="control-status" data-control-status hidden></p>
+          <header class="pitch-header">
+            <section class="scoreboard" aria-live="polite" role="status">
+              <span class="scoreboard-meta-item" data-timer-label></span>
+              <p class="scoreboard-team scoreboard-team-left">
+                <span class="scoreboard-team-name" data-team1-name></span>
+                <strong class="scoreboard-score" data-team1-score></strong>
+              </p>
+              <span class="scoreboard-versus">-</span>
+              <p class="scoreboard-team scoreboard-team-right">
+                <strong class="scoreboard-score" data-team2-score></strong>
+                <span class="scoreboard-team-name" data-team2-name></span>
+              </p>
+              <span class="scoreboard-meta-item" data-win-label></span>
+              <span class="scoreboard-meta-item" data-status-label></span>
+            </section>
 
-          <section class="scoreboard" aria-live="polite" role="status">
-            <span data-timer-label></span>
-            <p class="scoreboard-team scoreboard-team-left">
-              <span class="scoreboard-team-name" data-team1-name></span>
-              <strong class="scoreboard-score" data-team1-score></strong>
-            </p>
-            <p class="scoreboard-team scoreboard-team-right">
-              <strong class="scoreboard-score" data-team2-score></strong>
-              <span class="scoreboard-team-name" data-team2-name></span>
-              
-            </p>
-            <span data-win-label></span>
-            <span data-status-label></span>
-          </section>
+            <nav class="pitch-actions" aria-label="Pitch actions">
+              <button type="button" class="pitch-action" data-open-lobby-button>Lobby</button>
+              <button type="button" class="pitch-action" data-motion-button>Enable motion</button>
+            </nav>
+          </header>
 
           <section class="pitch-card" aria-label="Pitch">
             <div class="pitch-frame">
@@ -69,12 +70,14 @@
             
           </section>
 
-          <p class="cheer-row" data-cheer-row hidden>
-            <button type="button" class="pitch-action cheer-team1" data-cheer-team1-button>Cheer Team 1</button>
-            <button type="button" class="pitch-action cheer-team2" data-cheer-team2-button>Cheer Team 2</button>
-          </p>
-
-          <p class="cheer-counts" data-cheer-counts></p>
+          <footer class="pitch-footer">
+            <p class="control-status" data-control-status hidden></p>
+            <p class="cheer-row" data-cheer-row hidden>
+              <button type="button" class="pitch-action cheer-team1" data-cheer-team1-button>&#128227; Team 1</button>
+              <button type="button" class="pitch-action cheer-team2" data-cheer-team2-button>&#129345; Team 2</button>
+            </p>
+            <p class="cheer-counts" data-cheer-counts></p>
+          </footer>
 
         </section>
       </section>
@@ -207,7 +210,7 @@
               </label>
             </section>
 
-            <section class="form-stack" data-match-settings hidden>
+            <section class="form-stack compact-settings" data-match-settings hidden>
               <label class="field" for="win-mode-select">
                 Win mode
                 <select id="win-mode-select" data-win-mode>
@@ -220,10 +223,10 @@
                 <input id="win-target-input" type="number" min="1" max="9" data-win-target />
               </label>
               <label class="field" for="timer-minutes-input">
-                Time (minutes)
+                Time
                 <input id="timer-minutes-input" type="number" min="1" max="10" data-timer-minutes />
               </label>
-              <label class="field" for="timer-seconds-input">
+              <label class="field" for="timer-seconds-input" hidden>
                 Time (seconds)
                 <input id="timer-seconds-input" type="number" min="0" max="59" data-timer-seconds />
               </label>

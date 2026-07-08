@@ -1,4 +1,5 @@
 import { canUseGyroControl, initGyroControl, initKeyboardFallback, needsGyroPermission, stopGyroControl } from "../game/gyro-control";
+import { playCheer, playGoalHorn, playWhistle } from "../game/sound-effects";
 import type {
   AssignedFoosballPlayer,
   BallMovementState,
@@ -87,6 +88,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   const statusLabel = screen.querySelector<HTMLSpanElement>("[data-status-label]")!;
   const goalFlash = screen.querySelector<HTMLElement>("[data-goal-flash]")!;
   const kickoffCountdown = screen.querySelector<HTMLElement>("[data-kickoff-countdown]")!;
+  const pitchFooter = screen.querySelector<HTMLElement>(".pitch-footer")!;
   const cheerRow = screen.querySelector<HTMLElement>("[data-cheer-row]")!;
   const cheerCounts = screen.querySelector<HTMLParagraphElement>("[data-cheer-counts]")!;
   const cheerTeam1Button = screen.querySelector<HTMLButtonElement>("[data-cheer-team1-button]")!;
@@ -116,6 +118,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   let team2CheerCount = 0;
   let goalFlashTimeout: number | undefined;
   let kickoffCountdownInterval: number | undefined;
+  let lastWhistleSequence = -1;
   let gameOverModal: HTMLDivElement | null = null;
   let backToWaitingClicked = false;
   const isSpectator = handlers.currentPerson?.type === "spectator";
@@ -131,8 +134,12 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   goalFlash.classList.remove("is-visible");
   kickoffCountdown.classList.remove("is-visible");
   pitchFrame.classList.toggle("is-team2-view", isTeam2View);
-  lobbyButton.hidden = !handlers.onOpenLobby;
-  lobbyButton.addEventListener("click", () => handlers.onOpenLobby?.(), listenerOptions);
+  lobbyButton.hidden = !handlers.onOpenLobby || handlers.lobby?.match?.status === "active";
+
+  if (!lobbyButton.hidden) {
+    lobbyButton.addEventListener("click", () => handlers.onOpenLobby?.(), listenerOptions);
+  }
+  pitchFooter.hidden = !handlers.lobby;
 
   motionButton.addEventListener("click", () => {
     void startGyro();
@@ -143,7 +150,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   cheerTeam1Button.addEventListener("click", () => sendCheer("team1Player"), listenerOptions);
   cheerTeam2Button.addEventListener("click", () => sendCheer("team2Player"), listenerOptions);
 
-  updateCheerCounts();
+  renderCheerCounts();
   boundary.addEventListener("pointerdown", handleKickPointerDown, listenerOptions);
   boundary.addEventListener("pointermove", handleKickPointerMove, listenerOptions);
   boundary.addEventListener("pointerup", handleKickPointerEnd, listenerOptions);
@@ -157,7 +164,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
 
   controlledMarker = markers.find((marker) => marker.isControlled) ?? null;
   motionButton.hidden = !controlledMarker || (!canUseGyroControl() && window.isSecureContext);
-  motionButton.textContent = needsGyroPermission() ? "Enable motion" : "Start motion";
+  motionButton.textContent = "Motion";
 
   if (controlledMarker && handlers.lobby && needsGyroPermission()) {
     showMotionPermissionPrompt();
@@ -362,7 +369,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       return;
     }
 
-    statusLabel.textContent = matchState?.status === "active" ? "Live" : "Waiting";
+    statusLabel.textContent = matchState?.status === "active" ? "" : "Waiting";
   }
 
   function startTimer(): void {
@@ -403,6 +410,8 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function showGoalFlash(scoringTeam: TeamSide): void {
+    playGoalHorn();
+
     const teamName = scoringTeam === "team1"
       ? lobbyData?.teamNames.team1 ?? "Team 1"
       : lobbyData?.teamNames.team2 ?? "Team 2";
@@ -728,21 +737,23 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     return Date.now() - serverClockOffsetMs;
   }
 
-  function updateCheerCounts(): void {
+  function renderCheerCounts(): void {
     cheerCounts.innerHTML = `
-      <span class="cheer-badge cheer-team1"><span class="emoji">🔥</span><span class="count">${team1CheerCount}</span></span>
-      <span class="cheer-badge cheer-team2"><span class="emoji">🖤</span><span class="count">${team2CheerCount}</span></span>
+      <span class="cheer-badge cheer-team1"><span class="emoji">📣</span><span class="count">${team1CheerCount}</span></span>
+      <span class="cheer-badge cheer-team2"><span class="emoji">🥁</span><span class="count">${team2CheerCount}</span></span>
     `;
   }
 
   function playCheerBurst(team: FoosballTeam): void {
+    playCheer();
+
     if (team === "team1Player") {
       team1CheerCount += 1;
     } else {
       team2CheerCount += 1;
     }
 
-    updateCheerCounts();
+    renderCheerCounts();
 
     const burst = document.createElement("div");
 
@@ -766,6 +777,11 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     startBallAnimation();
 
     if (ballState.reason === "kickoff-pause") {
+      if (ballState.sequence !== lastWhistleSequence) {
+        playWhistle();
+        lastWhistleSequence = ballState.sequence;
+      }
+
       startKickoffCountdown(ballState);
     } else {
       stopKickoffCountdown();

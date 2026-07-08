@@ -143,7 +143,6 @@ function showGamePage(): void {
     onGoalUpdater: (updater) => {
       updateGameGoal = updater;
     },
-    onOpenLobby: showHomeView,
     onLeaveLobby: () => showHomeView("You left the lobby."),
     onBackToWaitingRoom: handleBackToWaitingRoom
   });
