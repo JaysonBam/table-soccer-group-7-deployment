@@ -1,0 +1,22 @@
+{
+  "name": "table-soccer-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^6.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
+  }
+}

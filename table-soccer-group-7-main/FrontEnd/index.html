@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Table Soccer</title>
+  </head>
+  <body>
+    <main id="app">
+      <section id="pitch-screen" class="page pitch-page">
+        <section class="pitch-shell" aria-label="Soccer table">
+          <nav class="pitch-actions" aria-label="Pitch actions">
+            <button type="button" class="pitch-action" data-open-lobby-button>Lobby</button>
+            <button type="button" class="pitch-action" data-motion-button>Enable motion</button>
+          </nav>
+          <p class="control-status" data-control-status hidden></p>
+
+          <section class="scoreboard" aria-live="polite" role="status">
+            <p class="scoreboard-title">Score</p>
+            <p class="scoreboard-team scoreboard-team-left">
+              <span class="scoreboard-team-name" data-team1-name>Team 1</span>
+              <strong class="scoreboard-score" data-team1-score>0</strong>
+            </p>
+            <p class="scoreboard-team scoreboard-team-right">
+              <span class="scoreboard-team-name" data-team2-name>Team 2</span>
+              <strong class="scoreboard-score" data-team2-score>0</strong>
+            </p>
+          </section>
+
+          <section class="pitch-card" aria-label="Pitch">
+            <div class="pitch-frame">
+              <div class="pitch">
+                <div class="boundary">
+                  <div class="center-line"></div>
+                  <div class="center-circle">
+                    <div class="center-spot"></div>
+                  </div>
+                  <div class="penalty-area penalty-left"></div>
+                  <div class="penalty-area penalty-right"></div>
+                  <div class="goal-box goal-box-left"></div>
+                  <div class="goal-box goal-box-right"></div>
+                  <div class="goal goal-left">
+                    <span class="post"></span>
+                    <span class="crossbar"></span>
+                    <span class="post"></span>
+                  </div>
+                  <div class="goal goal-right">
+                    <span class="post"></span>
+                    <span class="crossbar"></span>
+                    <span class="post"></span>
+                  </div>
+                  <div class="rod-layer" data-rod-layer></div>
+                  <div class="player-layer" data-player-layer></div>
+                  <div class="ball-layer">
+                    <div class="game-ball" data-ball hidden></div>
+                  </div>
+                  <div class="cheer-layer" data-cheer-layer></div>
+                </div>
+              </div>
+            </div>
+
+            <p class="goal-flash" data-goal-flash>Goal</p>
+
+            <p class="match-status">
+              <span class="match-status-pill">
+                <span data-timer-label></span>
+                <span data-win-label></span>
+                <span data-status-label></span>
+              </span>
+            </p>
+          </section>
+
+          <p class="cheer-row" data-cheer-row hidden>
+            <button type="button" class="pitch-action cheer-team1" data-cheer-team1-button>Cheer Team 1</button>
+            <button type="button" class="pitch-action cheer-team2" data-cheer-team2-button>Cheer Team 2</button>
+          </p>
+
+          <p class="cheer-counts" data-cheer-counts hidden></p>
+
+        </section>
+      </section>
+
+      <section id="lobby-screen" class="page page-narrow" hidden>
+        <header class="page-header">
+          <h1>Table Soccer</h1>
+          <p class="muted" data-greeting hidden></p>
+        </header>
+
+        <form class="form-stack" data-name-form novalidate>
+          <label class="field" for="person-name-input">
+            Name
+            <input
+              id="person-name-input"
+              name="personName"
+              type="text"
+              autocomplete="name"
+              placeholder="Your name"
+              minlength="2"
+              maxlength="24"
+              required
+            />
+          </label>
+          <button class="button primary" type="submit">Continue</button>
+        </form>
+
+        <nav class="main-actions" data-lobby-actions hidden aria-label="Lobby actions">
+          <button class="button primary" type="button" data-open-join-dialog>Join game</button>
+          <button class="button secondary" type="button" data-open-create-dialog>Create game</button>
+        </nav>
+
+        <p class="status-message" data-home-status-message aria-live="polite"></p>
+
+        <dialog class="modal" data-join-dialog>
+          <button type="button" class="modal-close" data-close-dialog aria-label="Close">x</button>
+          <h2>Join game</h2>
+          <form class="form-stack" data-join-form novalidate>
+            <label class="field" for="join-lobby-code-input">
+              Game code
+              <input
+                id="join-lobby-code-input"
+                name="lobbyCode"
+                type="text"
+                autocomplete="off"
+                inputmode="text"
+                placeholder="ABC123"
+                maxlength="6"
+                required
+              />
+            </label>
+            <fieldset class="field-group">
+              <legend class="field-label">Type</legend>
+              <p class="radio-row">
+                <label class="radio-option">
+                  <input type="radio" name="joinChoice" value="player" checked />
+                  player
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="joinChoice" value="spectator" />
+                  spectator
+                </label>
+              </p>
+            </fieldset>
+            <p class="dialog-actions">
+              <button class="button primary" type="submit">Join</button>
+            </p>
+          </form>
+        </dialog>
+
+        <dialog class="modal" data-create-dialog>
+          <button type="button" class="modal-close" data-close-dialog aria-label="Close">x</button>
+          <h2>Create game</h2>
+          <form class="form-stack" data-create-form>
+            <fieldset class="field-group">
+              <legend class="field-label">Type</legend>
+              <p class="radio-row">
+                <label class="radio-option">
+                  <input type="radio" name="createChoice" value="player" checked />
+                  player
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="createChoice" value="spectator" />
+                  spectator
+                </label>
+              </p>
+            </fieldset>
+            <p class="dialog-actions">
+              <button class="button primary" type="submit">Create</button>
+            </p>
+          </form>
+        </dialog>
+      </section>
+
+      <section id="waiting-screen" class="page" hidden>
+        <header class="page-header">
+          <h1>Waiting Room</h1>
+          <p class="game-code" data-lobby-code></p>
+          <p class="muted" data-person-type></p>
+        </header>
+
+        <section class="setup-panel">
+          <header class="page-header setup-header">
+            <h2>Match setup</h2>
+            <p class="muted">Captains can pick team names and host can choose the match rules.</p>
+          </header>
+          <p class="muted" data-setup-notice hidden></p>
+          <section class="setup-sections">
+            <section class="form-stack" data-captain-fields hidden>
+              <label class="field" for="team-1-captain-select">
+                Team 1 captain
+                <select id="team-1-captain-select" data-team1-captain></select>
+              </label>
+              <label class="field" for="team-2-captain-select">
+                Team 2 captain
+                <select id="team-2-captain-select" data-team2-captain></select>
+              </label>
+            </section>
+
+            <section class="form-stack" data-team-name-fields hidden>
+              <label class="field" for="team-1-name-input" data-team1-name-field hidden>
+                Team 1 name
+                <input id="team-1-name-input" type="text" data-team1-name />
+              </label>
+              <label class="field" for="team-2-name-input" data-team2-name-field hidden>
+                Team 2 name
+                <input id="team-2-name-input" type="text" data-team2-name />
+              </label>
+            </section>
+
+            <section class="form-stack" data-match-settings hidden>
+              <label class="field" for="win-mode-select">
+                Win mode
+                <select id="win-mode-select" data-win-mode>
+                  <option value="firstTo">First to</option>
+                  <option value="suddenDeath">Sudden death</option>
+                </select>
+              </label>
+              <label class="field" for="win-target-input">
+                Win target
+                <input id="win-target-input" type="number" min="1" max="9" data-win-target />
+              </label>
+              <label class="field" for="timer-minutes-input">
+                Time (minutes)
+                <input id="timer-minutes-input" type="number" min="1" max="10" data-timer-minutes />
+              </label>
+              <label class="field" for="timer-seconds-input">
+                Time (seconds)
+                <input id="timer-seconds-input" type="number" min="0" max="59" data-timer-seconds />
+              </label>
+            </section>
+          </section>
+        </section>
+
+        <section class="people-groups" aria-label="Players">
+          <section class="team-grid">
+            <section class="people-panel">
+              <h2>Team 1</h2>
+              <ul class="people-list" data-people-list="team1Player"></ul>
+            </section>
+            <section class="people-panel">
+              <h2>Team 2</h2>
+              <ul class="people-list" data-people-list="team2Player"></ul>
+            </section>
+          </section>
+          <section class="people-panel">
+            <h2>Spectators</h2>
+            <ul class="people-list" data-people-list="spectator"></ul>
+          </section>
+        </section>
+
+        <section class="ready-panel">
+          <button class="button primary" type="button" data-ready-button>Ready</button>
+          <p data-ready-status></p>
+          <p data-spectator-status hidden></p>
+        </section>
+
+        <p class="status-message" data-waiting-status-message aria-live="polite"></p>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
