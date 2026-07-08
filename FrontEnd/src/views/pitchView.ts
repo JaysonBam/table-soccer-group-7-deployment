@@ -61,6 +61,7 @@ const KICKOFF_COUNTDOWN_MS = 3000;
 const MIN_KICK_SWIPE_DISTANCE = 24;
 const POSITION_SEND_INTERVAL_MS = 50;
 const POSITION_SEND_EPSILON = 0.015;
+const GYRO_RENDER_EASE = 0.25;
 
 export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers = {}): () => void {
   const listenerController = new AbortController();
@@ -98,6 +99,8 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   let currentControlledPosition = Number.NaN;
   let lastSentPosition = Number.NaN;
   let lastSentAt = 0;
+  let gyroTargetPosition = Number.NaN;
+  let gyroRenderFrame = 0;
   let team1ScoreValue = handlers.lobby?.score.team1 ?? 0;
   let team2ScoreValue = handlers.lobby?.score.team2 ?? 0;
   let lobbyData: Lobby | null = handlers.lobby ?? null;
@@ -193,6 +196,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     window.clearInterval(kickoffCountdownInterval);
     cancelAnimationFrame(ballAnimationFrame);
     stopDragPositionStream();
+    stopGyroRenderLoop();
     dismissMotionPermissionPrompt();
     stopKeyboardFallback();
     stopGyroControl();
@@ -317,7 +321,47 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function updateScreenAxisPlayerPosition(tilt: number, forceSend = false): void {
-    updatePlayerPosition(isTeam2View ? -tilt : tilt, forceSend);
+    updatePlayerPosition(toScreenAxisPosition(tilt), forceSend);
+  }
+
+  function toScreenAxisPosition(tilt: number): number {
+    return isTeam2View ? -tilt : tilt;
+  }
+
+  function updateGyroPosition(tilt: number): void {
+    gyroTargetPosition = toScreenAxisPosition(tilt);
+    ensureGyroRenderLoop();
+  }
+
+  // iOS dispatches deviceorientation far less often/regularly than Android, so driving the
+  // marker straight off each event (as keyboard/drag do) looks stepped. Render every animation
+  // frame instead and ease toward the latest sensor reading, independent of event rate.
+  function ensureGyroRenderLoop(): void {
+    if (gyroRenderFrame) {
+      return;
+    }
+
+    const renderGyroPosition = (): void => {
+      if (!controlledMarker || Number.isNaN(gyroTargetPosition)) {
+        gyroRenderFrame = 0;
+        return;
+      }
+
+      const easedPosition = Number.isNaN(currentControlledPosition)
+        ? gyroTargetPosition
+        : currentControlledPosition + (gyroTargetPosition - currentControlledPosition) * GYRO_RENDER_EASE;
+
+      updatePlayerPosition(easedPosition);
+      gyroRenderFrame = requestAnimationFrame(renderGyroPosition);
+    };
+
+    gyroRenderFrame = requestAnimationFrame(renderGyroPosition);
+  }
+
+  function stopGyroRenderLoop(): void {
+    cancelAnimationFrame(gyroRenderFrame);
+    gyroRenderFrame = 0;
+    gyroTargetPosition = Number.NaN;
   }
 
   async function startGyro(): Promise<void> {
@@ -325,7 +369,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       return;
     }
 
-    const motionResult = await initGyroControl(updateScreenAxisPlayerPosition);
+    const motionResult = await initGyroControl(updateGyroPosition);
 
     if (motionResult.started) {
       motionButton.hidden = true;
