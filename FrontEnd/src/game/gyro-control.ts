@@ -4,7 +4,7 @@
  * into its own coordinate system.
  */
 
-interface DeviceMotionPermissionEvent {
+interface DevicePermissionEvent {
   requestPermission?: () => Promise<"granted" | "denied">;
 }
 
@@ -43,7 +43,9 @@ export function needsGyroPermission(): boolean {
 }
 
 export function canUseGyroControl(): boolean {
-  return typeof DeviceOrientationEvent !== "undefined" || needsGyroPermission();
+  return typeof DeviceOrientationEvent !== "undefined"
+    || typeof DeviceMotionEvent !== "undefined"
+    || needsGyroPermission();
 }
 
 export async function requestGyroPermission(): Promise<GyroPermissionResult> {
@@ -82,7 +84,7 @@ export async function initGyroControl(onUpdateCallback: TiltCallback): Promise<G
     };
   }
 
-  if (typeof DeviceOrientationEvent === "undefined") {
+  if (typeof DeviceOrientationEvent === "undefined" && typeof DeviceMotionEvent === "undefined") {
     return {
       started: false,
       reason: "unsupported"
@@ -132,6 +134,8 @@ function startListening(): void {
   }
 
   window.addEventListener("deviceorientation", handleOrientation, true);
+  window.addEventListener("deviceorientationabsolute", handleOrientation, true);
+  window.addEventListener("devicemotion", handleMotion, true);
   isListening = true;
 }
 
@@ -155,9 +159,29 @@ function handleOrientation(event: DeviceOrientationEvent): void {
   onUpdate?.(tilt);
 }
 
-function getMotionPermissionEvent(): DeviceMotionPermissionEvent | null {
+function handleMotion(event: DeviceMotionEvent): void {
+  const gravityX = event.accelerationIncludingGravity?.x;
+
+  if (gravityX === null || gravityX === undefined) {
+    return;
+  }
+
+  const targetTilt = Math.max(-1, Math.min(1, -gravityX / 9.81));
+
+  smoothGamma += (targetTilt - smoothGamma) * SMOOTHING;
+  const tilt = Math.abs(smoothGamma) < TILT_DEADBAND ? 0 : smoothGamma;
+
+  if (Math.abs(tilt - lastEmittedTilt) < EMIT_EPSILON) {
+    return;
+  }
+
+  lastEmittedTilt = tilt;
+  onUpdate?.(tilt);
+}
+
+function getMotionPermissionEvent(): DevicePermissionEvent | null {
   const DeviceOrientationEventClass = typeof DeviceOrientationEvent !== "undefined"
-    ? (DeviceOrientationEvent as unknown as DeviceMotionPermissionEvent)
+    ? (DeviceOrientationEvent as unknown as DevicePermissionEvent)
     : null;
 
   if (DeviceOrientationEventClass && typeof DeviceOrientationEventClass.requestPermission === "function") {
@@ -165,7 +189,7 @@ function getMotionPermissionEvent(): DeviceMotionPermissionEvent | null {
   }
 
   const DeviceMotionEventClass = typeof DeviceMotionEvent !== "undefined"
-    ? (DeviceMotionEvent as unknown as DeviceMotionPermissionEvent)
+    ? (DeviceMotionEvent as unknown as DevicePermissionEvent)
     : null;
 
   if (DeviceMotionEventClass && typeof DeviceMotionEventClass.requestPermission === "function") {
