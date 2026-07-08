@@ -4,7 +4,7 @@
  * into its own coordinate system.
  */
 
-interface MotionPermissionEventClass {
+interface DeviceMotionPermissionEvent {
   requestPermission?: () => Promise<"granted" | "denied">;
 }
 
@@ -18,67 +18,60 @@ export type GyroStartResult =
       reason: "unsupported" | "permission-denied" | "permission-error" | "insecure-context";
     };
 
-const SMOOTHING = 0.12;
-const GAMMA_RANGE = 35;
-const INPUT_DEADZONE = 0.06;
-const OUTPUT_EPSILON = 0.01;
-const CALIBRATION_SAMPLES = 12;
+const SMOOTHING = 0.1;
+const GAMMA_RANGE = 30;
+const TILT_DEADBAND = 0.025;
+const EMIT_EPSILON = 0.008;
 
 let rawGamma = 0;
 let smoothGamma = 0;
-let baselineGamma = 0;
-let calibrationCount = 0;
-let calibrationTotal = 0;
-let lastOutputTilt = 0;
+let lastEmittedTilt = 0;
 let onUpdate: TiltCallback | null = null;
 let isListening = false;
 
 export function needsGyroPermission(): boolean {
-  return getPermissionRequester() !== null;
+  return getMotionPermissionEvent() !== null;
 }
 
 export function canUseGyroControl(): boolean {
-  return typeof DeviceOrientationEvent !== "undefined";
+  return typeof DeviceOrientationEvent !== "undefined" || needsGyroPermission();
 }
 
 export async function initGyroControl(onUpdateCallback: TiltCallback): Promise<GyroStartResult> {
   onUpdate = onUpdateCallback;
 
-  if (typeof DeviceOrientationEvent === "undefined") {
+  if (!canUseGyroControl()) {
     return {
       started: false,
       reason: window.isSecureContext ? "unsupported" : "insecure-context"
     };
   }
 
-  if (!window.isSecureContext) {
-    return {
-      started: false,
-      reason: "insecure-context"
-    };
-  }
+  const permissionEvent = getMotionPermissionEvent();
 
-  const requestPermission = getPermissionRequester();
-
-  if (requestPermission) {
+  if (permissionEvent) {
     try {
-      const result = await requestPermission();
+      const result = await permissionEvent.requestPermission!();
 
-      if (result === "granted") {
-        startListening();
-        return { started: true };
+      if (result !== "granted") {
+        return {
+          started: false,
+          reason: "permission-denied"
+        };
       }
-
-      return {
-        started: false,
-        reason: "permission-denied"
-      };
     } catch {
       return {
         started: false,
         reason: "permission-error"
       };
     }
+  }
+
+  if (typeof DeviceOrientationEvent === "undefined") {
+    return {
+      started: false,
+      reason: "unsupported"
+    };
   }
 
   startListening();
@@ -93,10 +86,7 @@ export function stopGyroControl(): void {
 
   rawGamma = 0;
   smoothGamma = 0;
-  baselineGamma = 0;
-  calibrationCount = 0;
-  calibrationTotal = 0;
-  lastOutputTilt = 0;
+  lastEmittedTilt = 0;
   onUpdate = null;
 }
 
@@ -126,13 +116,6 @@ function startListening(): void {
     return;
   }
 
-  rawGamma = 0;
-  smoothGamma = 0;
-  baselineGamma = 0;
-  calibrationCount = 0;
-  calibrationTotal = 0;
-  lastOutputTilt = 0;
-
   window.addEventListener("deviceorientation", handleOrientation, true);
   isListening = true;
 }
@@ -144,47 +127,33 @@ function handleOrientation(event: DeviceOrientationEvent): void {
 
   rawGamma = event.gamma;
 
-  if (calibrationCount < CALIBRATION_SAMPLES) {
-    calibrationTotal += rawGamma;
-    calibrationCount += 1;
-    baselineGamma = calibrationTotal / calibrationCount;
-  }
-
-  const centeredGamma = rawGamma - baselineGamma;
-  let targetGamma = Math.max(-1, Math.min(1, centeredGamma / GAMMA_RANGE));
-
-  if (Math.abs(targetGamma) < INPUT_DEADZONE) {
-    targetGamma = 0;
-  } else {
-    const adjustedMagnitude = (Math.abs(targetGamma) - INPUT_DEADZONE) / (1 - INPUT_DEADZONE);
-
-    targetGamma = Math.sign(targetGamma) * adjustedMagnitude;
-  }
+  const targetGamma = Math.max(-1, Math.min(1, rawGamma / GAMMA_RANGE));
 
   smoothGamma += (targetGamma - smoothGamma) * SMOOTHING;
+  const tilt = Math.abs(smoothGamma) < TILT_DEADBAND ? 0 : smoothGamma;
 
-  if (Math.abs(smoothGamma - lastOutputTilt) < OUTPUT_EPSILON) {
+  if (Math.abs(tilt - lastEmittedTilt) < EMIT_EPSILON) {
     return;
   }
 
-  lastOutputTilt = smoothGamma;
-  onUpdate?.(smoothGamma);
+  lastEmittedTilt = tilt;
+  onUpdate?.(tilt);
 }
 
-function getPermissionRequester(): (() => Promise<"granted" | "denied">) | null {
+function getMotionPermissionEvent(): DeviceMotionPermissionEvent | null {
   if (typeof DeviceOrientationEvent !== "undefined") {
-    const orientationClass = DeviceOrientationEvent as unknown as MotionPermissionEventClass;
+    const DeviceOrientationEventClass = DeviceOrientationEvent as unknown as DeviceMotionPermissionEvent;
 
-    if (typeof orientationClass.requestPermission === "function") {
-      return orientationClass.requestPermission.bind(orientationClass);
+    if (typeof DeviceOrientationEventClass.requestPermission === "function") {
+      return DeviceOrientationEventClass;
     }
   }
 
   if (typeof DeviceMotionEvent !== "undefined") {
-    const motionClass = DeviceMotionEvent as unknown as MotionPermissionEventClass;
+    const DeviceMotionEventClass = DeviceMotionEvent as unknown as DeviceMotionPermissionEvent;
 
-    if (typeof motionClass.requestPermission === "function") {
-      return motionClass.requestPermission.bind(motionClass);
+    if (typeof DeviceMotionEventClass.requestPermission === "function") {
+      return DeviceMotionEventClass;
     }
   }
 
