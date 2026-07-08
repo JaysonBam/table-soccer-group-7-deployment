@@ -269,9 +269,8 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     const finalScore = document.createElement("p");
     const mvpSummary = document.createElement("p");
     const legend = document.createElement("p");
-    const table = document.createElement("table");
-    const thead = document.createElement("thead");
-    const tbody = document.createElement("tbody");
+    const pointsList = document.createElement("ol");
+    const leaders = document.createElement("section");
     const actions = document.createElement("p");
     const leaveButton = document.createElement("button");
     const waitingButton = document.createElement("button");
@@ -285,41 +284,29 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     legend.className = "game-over-legend";
     legend.textContent = "Kick +1 | Block +3 | Goal +5 | Own Goal -5";
 
-    thead.innerHTML = `
-      <tr>
-        <th>#</th>
-        <th>Name</th>
-        <th>Team</th>
-        <th>Role</th>
-        <th>Kicks</th>
-        <th>Blocks</th>
-        <th>Goals</th>
-        <th>Own goals</th>
-        <th>Points</th>
-      </tr>
-    `;
-
+    pointsList.className = "game-over-points-list";
     rankedRows.forEach((row, index) => {
-      const tr = document.createElement("tr");
-      const rank = index + 1;
+      const item = document.createElement("li");
+      const rank = document.createElement("span");
+      const player = document.createElement("span");
+      const points = document.createElement("strong");
 
-      tr.className = row.assignment.id === mvp?.assignment.id ? "is-mvp" : "";
-      tr.innerHTML = `
-        <td data-label="#">${rank}</td>
-        <td data-label="Name">${escapeHtml(row.assignment.name)}</td>
-        <td data-label="Team">${escapeHtml(getTeamName(lobby, row.assignment.team))}</td>
-        <td data-label="Role">${getRoleLabel(row.assignment.role)}</td>
-        <td data-label="Kicks">${row.stats.kicks}</td>
-        <td data-label="Blocks">${row.stats.blocks}</td>
-        <td data-label="Goals">${row.stats.goals}</td>
-        <td data-label="Own goals">${row.stats.ownGoals}</td>
-        <td data-label="Points">${row.stats.points}</td>
-      `;
-      tbody.append(tr);
+      item.className = row.assignment.id === mvp?.assignment.id ? "is-mvp" : "";
+      rank.className = "game-over-rank";
+      rank.textContent = `#${index + 1}`;
+      player.textContent = `${row.assignment.name} (${getTeamName(lobby, row.assignment.team)})`;
+      points.textContent = `${row.stats.points} pts`;
+      item.append(rank, player, points);
+      pointsList.append(item);
     });
 
-    table.className = "game-over-stats";
-    table.append(thead, tbody);
+    leaders.className = "game-over-leaders";
+    leaders.append(
+      createLeaderItem("Most kicks", getStatLeaders(rankedRows, "kicks")),
+      createLeaderItem("Most blocks", getStatLeaders(rankedRows, "blocks")),
+      createLeaderItem("Most goals", getStatLeaders(rankedRows, "goals")),
+      createLeaderItem("Own goals", getStatLeaders(rankedRows, "ownGoals"))
+    );
     actions.className = "game-over-actions";
     leaveButton.className = "button secondary";
     leaveButton.type = "button";
@@ -340,7 +327,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       void handlers.onBackToWaitingRoom?.();
     }, { signal: listenerController.signal });
     actions.append(leaveButton, waitingButton);
-    card.append(title, finalScore, mvpSummary, table, legend, actions);
+    card.append(title, finalScore, mvpSummary, pointsList, leaders, legend, actions);
     overlay.replaceChildren(card);
   }
 
@@ -1030,6 +1017,7 @@ type StatRow = {
   assignment: AssignedFoosballPlayer;
   stats: PlayerStats;
 };
+type StatKey = "kicks" | "blocks" | "goals" | "ownGoals";
 
 function getStatRows(lobby: Lobby): StatRow[] {
   return (lobby.assignments ?? []).map((assignment) => ({
@@ -1106,11 +1094,29 @@ function getFinalScoreText(lobby: Lobby): string {
   return `Draw ${scoreText}`;
 }
 
-function escapeHtml(value: string): string {
-  const element = document.createElement("span");
+function getStatLeaders(rows: StatRow[], statKey: StatKey): string {
+  const highestValue = Math.max(0, ...rows.map((row) => row.stats[statKey]));
 
-  element.textContent = value;
-  return element.innerHTML;
+  if (highestValue === 0) {
+    return "None";
+  }
+
+  const names = rows
+    .filter((row) => row.stats[statKey] === highestValue)
+    .map((row) => row.assignment.name);
+
+  return `${names.join(", ")} (${highestValue})`;
+}
+
+function createLeaderItem(label: string, value: string): HTMLParagraphElement {
+  const item = document.createElement("p");
+  const labelElement = document.createElement("span");
+  const valueElement = document.createElement("strong");
+
+  labelElement.textContent = label;
+  valueElement.textContent = value;
+  item.append(labelElement, valueElement);
+  return item;
 }
 
 function getRoleLabel(role: FoosballRole): string {

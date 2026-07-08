@@ -631,22 +631,28 @@
 }
 
 .pitch-page .game-over-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 100;
   display: grid;
   place-items: center;
-  padding: clamp(10px, 3vw, 24px);
+  width: 100dvw;
+  min-width: 0;
+  padding: clamp(8px, 3dvw, 24px);
   background: rgba(31, 41, 51, 0.32);
+  overflow: hidden;
 }
 
 .pitch-page .game-over-card {
   position: relative;
-  width: min(96vw, 720px);
+  width: min(calc(100dvw - 16px), 720px);
+  max-width: calc(100dvw - 16px);
   max-height: min(90dvh, 760px);
+  min-width: 0;
   display: grid;
   gap: 14px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: clamp(18px, 4vw, 28px);
   border: 0.2rem solid var(--color-card-border);
   border-radius: 1rem;
@@ -685,10 +691,11 @@
   color: var(--color-card-border);
   font-size: clamp(2.4rem, 9vw, 4rem);
   font-weight: 800;
-  line-height: 0.9;
+  line-height: 1;
 }
 
 .pitch-page .game-over-score {
+  min-width: 0;
   padding: 10px 14px;
   border: 0.18rem solid var(--color-card-border);
   border-radius: 0.9rem;
@@ -696,16 +703,20 @@
   color: var(--color-text);
   font-size: clamp(1.15rem, 4vw, 1.65rem);
   font-weight: 800;
+  overflow-wrap: anywhere;
   box-shadow: 0 0.35rem 0 rgba(31, 41, 51, 0.16);
 }
 
 .pitch-page .game-over-mvp {
+  max-width: 100%;
+  min-width: 0;
   justify-self: center;
   padding: 8px 14px;
   border-radius: 999px;
   background: #f5f7fb;
   color: var(--color-primary-dark);
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .pitch-page .game-over-legend {
@@ -714,38 +725,74 @@
   font-weight: 700;
 }
 
-.pitch-page .game-over-stats {
+.pitch-page .game-over-points-list {
   width: 100%;
-  border-collapse: collapse;
-  overflow: hidden;
   border: 0.14rem solid var(--color-border);
   border-radius: 0.75rem;
+  margin: 0;
+  padding: 6px;
   background: #f5f7fb;
-  font-size: 0.9rem;
+  list-style: none;
 }
 
-.pitch-page .game-over-stats th,
-.pitch-page .game-over-stats td {
-  padding: 8px 7px;
-  border-bottom: 1px solid var(--color-border);
-  text-align: center;
-}
-
-.pitch-page .game-over-stats th:first-child,
-.pitch-page .game-over-stats td:first-child {
+.pitch-page .game-over-points-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 0.5rem;
   text-align: left;
 }
 
-.pitch-page .game-over-stats th {
+.pitch-page .game-over-rank {
   color: var(--color-muted);
-  font-size: 0.78em;
-  text-transform: uppercase;
+  font-weight: 800;
 }
 
-.pitch-page .game-over-stats tr.is-mvp {
+.pitch-page .game-over-points-list li span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pitch-page .game-over-points-list li strong {
+  color: var(--color-card-border);
+}
+
+.pitch-page .game-over-points-list li.is-mvp {
   background: #fff4bd;
+  font-weight: 800;
+}
+
+.pitch-page .game-over-leaders {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  text-align: left;
+}
+
+.pitch-page .game-over-leaders p {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 0.65rem;
+  background: #f5f7fb;
+}
+
+.pitch-page .game-over-leaders span {
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.pitch-page .game-over-leaders strong {
+  min-width: 0;
   color: var(--color-text);
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .pitch-page .game-over-actions {
@@ -758,11 +805,48 @@
 .pitch-page .game-over-actions .button {
   width: auto;
   min-width: 12rem;
+  max-width: 100%;
 }
 
 .pitch-page .game-over-actions .button:disabled {
   cursor: wait;
   opacity: 0.68;
+}
+
+@media (max-width: 900px) {
+  .pitch-page .game-over-overlay {
+    padding: 8px;
+  }
+
+  .pitch-page .game-over-card {
+    width: calc(100dvw - 16px);
+    max-width: calc(100dvw - 16px);
+    max-height: 90dvh;
+    gap: 12px;
+    padding: 24px 12px 14px;
+  }
+
+  .pitch-page .game-over-card h2 {
+    font-size: clamp(2rem, 12vw, 3.25rem);
+  }
+
+  .pitch-page .game-over-points-list li {
+    gap: 8px;
+    padding: 7px 6px;
+  }
+
+  .pitch-page .game-over-leaders {
+    grid-template-columns: 1fr;
+  }
+
+  .pitch-page .game-over-actions {
+    flex-direction: column;
+  }
+
+  .pitch-page .game-over-actions .button {
+    width: 100%;
+    min-height: 3rem;
+  }
 }
 
 @media (orientation: portrait) and (max-width: 900px) {
@@ -913,73 +997,5 @@
     right: auto;
     bottom: clamp(8px, 2dvh, 14px);
     transform: translateX(-50%);
-  }
-
-  .pitch-page .game-over-overlay {
-    padding: 10px;
-  }
-
-  .pitch-page .game-over-card {
-    width: min(96vw, 720px);
-    max-height: 90dvh;
-    gap: 12px;
-  }
-
-  .pitch-page .game-over-stats,
-  .pitch-page .game-over-stats tbody,
-  .pitch-page .game-over-stats tr,
-  .pitch-page .game-over-stats td {
-    display: block;
-  }
-
-  .pitch-page .game-over-stats {
-    border: 0;
-    background: transparent;
-  }
-
-  .pitch-page .game-over-stats thead {
-    display: none;
-  }
-
-  .pitch-page .game-over-stats tbody {
-    display: grid;
-    gap: 10px;
-  }
-
-  .pitch-page .game-over-stats tr {
-    padding: 10px;
-    border: 0.14rem solid var(--color-border);
-    border-radius: 0.75rem;
-    background: #f5f7fb;
-  }
-
-  .pitch-page .game-over-stats tr.is-mvp {
-    border-color: var(--color-card-border);
-    background: #fff4bd;
-  }
-
-  .pitch-page .game-over-stats td {
-    display: grid;
-    grid-template-columns: minmax(5.5rem, 42%) 1fr;
-    gap: 10px;
-    padding: 5px 0;
-    border: 0;
-    text-align: right;
-  }
-
-  .pitch-page .game-over-stats td::before {
-    content: attr(data-label);
-    color: var(--color-muted);
-    font-weight: 800;
-    text-align: left;
-  }
-
-  .pitch-page .game-over-actions {
-    flex-direction: column;
-  }
-
-  .pitch-page .game-over-actions .button {
-    width: 100%;
-    min-height: 3rem;
   }
 }
