@@ -12,7 +12,7 @@ type DisplayPerson = {
   type: PersonType;
 };
 
-const MIN_GAME_PLAYERS = 6;
+const MIN_GAME_PLAYERS = 2;
 
 export function createWaitingRoomView(
   screen: HTMLElement,
