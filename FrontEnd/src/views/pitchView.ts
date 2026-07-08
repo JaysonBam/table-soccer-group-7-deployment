@@ -52,7 +52,7 @@ type DragPointerState = {
 };
 
 const PLAYER_X_RANGE_PERCENT = 38;
-const MAX_AUTONOMOUS_X = 0.9;
+const MAX_AUTONOMOUS_X = 1;
 const CHEER_BURST_DURATION_MS = 900;
 const MIN_KICK_SWIPE_DISTANCE = 24;
 const POSITION_SEND_INTERVAL_MS = 50;
@@ -87,6 +87,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   let visualBallPosition: Vector2D | null = null;
   let activeSwipe: SwipePointerState | null = null;
   let activeDrag: DragPointerState | null = null;
+  let motionPermissionPrompt: HTMLDivElement | null = null;
   let ballAnimationFrame = 0;
   let serverClockOffsetMs = 0;
   let currentControlledPosition = Number.NaN;
@@ -108,6 +109,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   rodLayer.replaceChildren();
   playerLayer.replaceChildren();
   cheerLayer.replaceChildren();
+  pitchFrame.querySelector("[data-motion-permission-prompt]")?.remove();
   ball.hidden = true;
   controlStatus.hidden = true;
   controlStatus.textContent = "";
@@ -140,6 +142,11 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   controlledMarker = markers.find((marker) => marker.isControlled) ?? null;
   motionButton.hidden = !controlledMarker || (!canUseGyroControl() && window.isSecureContext);
   motionButton.textContent = needsGyroPermission() ? "Enable motion" : "Start motion";
+
+  if (controlledMarker && handlers.lobby && needsGyroPermission()) {
+    showMotionPermissionPrompt();
+  }
+
   handlers.onPositionUpdater?.((playerId, position) => {
     const marker = markerByPlayerId.get(playerId);
 
@@ -174,6 +181,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     handlers.onLobbyUpdater?.(null);
     cancelAnimationFrame(ballAnimationFrame);
     stopDragPositionStream();
+    dismissMotionPermissionPrompt();
     stopKeyboardFallback();
     stopGyroControl();
   };
@@ -310,12 +318,47 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
 
     if (motionResult.started) {
       motionButton.hidden = true;
+      dismissMotionPermissionPrompt();
       controlStatus.hidden = true;
       controlStatus.textContent = "";
       return;
     }
 
     showControlStatus(getMotionFailureMessage(motionResult.reason));
+  }
+
+  function showMotionPermissionPrompt(): void {
+    if (motionPermissionPrompt) {
+      return;
+    }
+
+    const prompt = document.createElement("div");
+    const title = document.createElement("p");
+    const message = document.createElement("p");
+    const button = document.createElement("button");
+
+    prompt.className = "motion-permission-prompt";
+    prompt.setAttribute("role", "dialog");
+    prompt.setAttribute("aria-label", "Motion controls permission");
+    prompt.setAttribute("data-motion-permission-prompt", "");
+    title.className = "motion-permission-title";
+    title.textContent = "Enable motion controls";
+    message.className = "motion-permission-copy";
+    message.textContent = "iPhone needs a tap here before gyro can control your player.";
+    button.className = "pitch-action motion-permission-button";
+    button.type = "button";
+    button.textContent = "Tap to allow gyro";
+    button.addEventListener("click", () => {
+      void startGyro();
+    }, { signal: listenerController.signal });
+    prompt.append(title, message, button);
+    pitchFrame.append(prompt);
+    motionPermissionPrompt = prompt;
+  }
+
+  function dismissMotionPermissionPrompt(): void {
+    motionPermissionPrompt?.remove();
+    motionPermissionPrompt = null;
   }
 
   function sendControlledPosition(position: number, force = false): void {

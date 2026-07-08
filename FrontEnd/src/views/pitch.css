@@ -551,6 +551,41 @@
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.24);
 }
 
+.pitch-page .motion-permission-prompt {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 30;
+  width: min(calc(100vw - 32px), 320px);
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  background: rgba(3, 10, 14, 0.9);
+  color: #ffffff;
+  text-align: center;
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.36);
+  transform: translate(-50%, -50%);
+}
+
+.pitch-page .motion-permission-title {
+  margin: 0;
+  font-weight: 800;
+}
+
+.pitch-page .motion-permission-copy {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.pitch-page .motion-permission-button {
+  width: 100%;
+  background: rgba(23, 105, 170, 0.92);
+}
+
 .pitch-page .goal-flash {
   position: absolute;
   top: clamp(16px, 3vw, 28px);
