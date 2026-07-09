@@ -2,6 +2,7 @@ import "./style.css";
 import { createLobby, joinLobby, returnLobbyToWaitingRoom } from "./api";
 import { connectLobbySocket, type LobbySocketConnection } from "./lobbySocket";
 import { saveStoredClientName } from "./storage";
+import { getActivePlayers } from "./types";
 import { createHomeView } from "./views/homeView";
 import { renderPitchView } from "./views/pitchView";
 import { createWaitingRoomView } from "./views/waitingRoomView";
@@ -20,6 +21,9 @@ import type {
 
 const LOBBY_ROUTE = "lobby";
 type ScreenName = "pitch" | "lobby" | "waiting";
+type ScreenOrientationWithLock = {
+  lock: (orientation: "portrait") => Promise<void>;
+};
 
 let currentLobby: Lobby | null = null;
 let currentPerson: ClientPerson | null = null;
@@ -54,6 +58,31 @@ const waitingRoomView = createWaitingRoomView(waitingScreen, {
 
 window.addEventListener("hashchange", showCurrentRoute);
 showCurrentRoute();
+attemptOrientationLock();
+
+async function attemptOrientationLock(): Promise<void> {
+  const overlay = document.querySelector<HTMLElement>("[data-orientation-overlay]")!;
+
+  function updateOverlay(): void {
+    const isPortrait = window.innerHeight >= window.innerWidth;
+    overlay.classList.toggle("is-visible", !isPortrait);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", updateOverlay, { once: true });
+  } else {
+    updateOverlay();
+  }
+
+  const orientation = screen.orientation as Partial<ScreenOrientationWithLock> | undefined;
+
+  if (typeof orientation?.lock === "function") {
+    await orientation.lock("portrait").catch(() => undefined);
+  }
+
+  window.addEventListener("orientationchange", updateOverlay);
+  window.addEventListener("resize", updateOverlay);
+}
 
 function showCurrentRoute(): void {
   if (getCurrentRoute() === LOBBY_ROUTE) {
@@ -187,13 +216,15 @@ function handleReady(): void {
     return;
   }
 
+  const readyPersonId = currentPerson.id;
+
   currentPerson = {
     ...currentPerson,
     ready: true
   };
   currentLobby = {
     ...currentLobby,
-    players: currentLobby.players.map((player) => player.id === currentPerson!.id ? { ...player, ready: true } : player)
+    players: currentLobby.players.map((player) => player.id === readyPersonId ? { ...player, ready: true } : player)
   };
   saveStoredClientName(currentPerson.name);
   renderCurrentWaitingRoom();
@@ -225,6 +256,12 @@ function handleSocketLobby(lobby: Lobby): void {
   }
 
   currentLobby = lobby;
+
+  if (hasCurrentPersonBeenRemoved(lobby)) {
+    showHomeView(`Match reset. Rejoin lobby ${lobby.code} to play again.`);
+    return;
+  }
+
   syncCurrentPersonReadyState();
 
   if (canGameStart(lobby)) {
@@ -320,6 +357,12 @@ async function handleBackToWaitingRoom(): Promise<void> {
     const lobby = await returnLobbyToWaitingRoom(currentLobby.code, currentPerson.id);
 
     currentLobby = lobby;
+
+    if (hasCurrentPersonBeenRemoved(lobby)) {
+      showHomeView(`Match reset. Rejoin lobby ${lobby.code} to play again.`);
+      return;
+    }
+
     currentPerson = {
       ...currentPerson,
       ready: false
@@ -385,8 +428,12 @@ function getPersonType(lobby: Lobby, playerId: string, joinChoice: JoinChoice): 
     return "spectator";
   }
 
-  const rosterPlayers = lobby.players.filter((player) => player.joinChoice !== "spectator");
+  const rosterPlayers = getActivePlayers(lobby.players);
   const playerIndex = rosterPlayers.findIndex((player) => player.id === playerId);
+
+  if (playerIndex === -1) {
+    return "spectator";
+  }
 
   return playerIndex % 2 === 0 ? "team1Player" : "team2Player";
 }
@@ -424,12 +471,23 @@ function syncCurrentPersonReadyState(): void {
   }
 
   const currentPersonId = currentPerson.id;
-  const matchingPlayer = currentLobby.players.find((player) => player.id === currentPersonId)!;
+  const matchingPlayer = currentLobby.players.find((player) => player.id === currentPersonId);
+
+  if (!matchingPlayer) {
+    return;
+  }
 
   currentPerson = {
     ...currentPerson,
-    ready: matchingPlayer.ready
+    ready: matchingPlayer.ready,
+    type: getPersonType(currentLobby, currentPersonId, currentPerson.joinChoice)
   };
+}
+
+function hasCurrentPersonBeenRemoved(lobby: Lobby): boolean {
+  const person = currentPerson;
+
+  return Boolean(person && !lobby.players.some((player) => player.id === person.id));
 }
 
 function closeLobbySocket(): void {

@@ -3,13 +3,22 @@ import { WebSocket } from "ws";
 const API_URL = process.env.API_URL ?? "http://localhost:3000";
 const WS_URL = process.env.WS_URL ?? "ws://localhost:3000";
 const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://127.0.0.1:5173/#/lobby";
-const BOT_NAMES = ["BotHost", "Bot2", "Bot3", "Bot4", "Bot5"];
+const BOT_COUNT = Number(process.env.BOT_COUNT ?? 5);
 const READY_BOT_COUNT = Number(process.env.READY_BOT_COUNT ?? 2);
 const WIN_TARGET = Number(process.env.WIN_TARGET ?? 5);
 const TIMER_SECONDS = Number(process.env.TIMER_SECONDS ?? 300);
 
 async function main() {
-  const [hostName, ...guestNames] = BOT_NAMES;
+  if (!Number.isInteger(BOT_COUNT) || BOT_COUNT < 1) {
+    throw new Error("BOT_COUNT must be a positive integer");
+  }
+
+  if (!Number.isInteger(READY_BOT_COUNT) || READY_BOT_COUNT < 0) {
+    throw new Error("READY_BOT_COUNT must be a non-negative integer");
+  }
+
+  const botNames = createBotNames(BOT_COUNT);
+  const [hostName, ...guestNames] = botNames;
   const lobby = await createLobby(hostName);
   const updatedLobby = await updateLobbySettings(lobby.code, lobby.hostId, {
     mode: "firstTo",
@@ -32,13 +41,13 @@ async function main() {
   const sockets = players.map((player) => connectLobbySocket(lobby.code, player.id, player.name));
   await waitForSocketsToOpen(sockets);
 
-  for (const socket of sockets.slice(0, READY_BOT_COUNT)) {
+  for (const socket of sockets.slice(0, Math.min(READY_BOT_COUNT, sockets.length))) {
     socket.send(JSON.stringify({ type: "ready" }));
   }
 
   console.log(`LOBBY_CODE=${lobby.code}`);
   console.log(`JOIN_URL=${FRONTEND_URL}`);
-  console.log(`BOT_COUNT=${players.length}`);
+  console.log(`BOT_COUNT=${BOT_COUNT}`);
   console.log(`READY_BOTS=${READY_BOT_COUNT}`);
   console.log(`WIN_TARGET=${WIN_TARGET}`);
   console.log(`TIMER_SECONDS=${TIMER_SECONDS}`);
@@ -56,6 +65,10 @@ async function main() {
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+}
+
+function createBotNames(botCount) {
+  return Array.from({ length: botCount }, (_, index) => (index === 0 ? "BotHost" : `Bot${index + 1}`));
 }
 
 async function createLobby(playerName) {

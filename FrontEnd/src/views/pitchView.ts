@@ -77,6 +77,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   const team2Name = screen.querySelector<HTMLSpanElement>("[data-team2-name]")!;
   const team1Score = screen.querySelector<HTMLElement>("[data-team1-score]")!;
   const team2Score = screen.querySelector<HTMLElement>("[data-team2-score]")!;
+  const pitchShell = screen.querySelector<HTMLElement>(".pitch-shell")!;
   const pitchFrame = screen.querySelector<HTMLDivElement>(".pitch-frame")!;
   const boundary = screen.querySelector<HTMLDivElement>(".boundary")!;
   const rodLayer = screen.querySelector<HTMLDivElement>("[data-rod-layer]")!;
@@ -250,7 +251,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
 
     if (!gameOverModal) {
       gameOverModal = createGameOverModal();
-      screen.querySelector<HTMLElement>(".pitch-shell")!.append(gameOverModal);
+      pitchShell.append(gameOverModal);
     }
 
     renderGameOverModal(gameOverModal, lobbyData);
@@ -561,7 +562,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     }
 
     if (isControlledMarkerTarget(event.target)) {
-      const latestPosition = getPositionFromPointer(event);
+      const latestPosition = getPositionFromClientPoint(event.clientX, event.clientY);
 
       activeDrag = {
         pointerId: event.pointerId,
@@ -628,7 +629,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     const kickRequest = createKickRequest(
       activeSwipe,
       event,
-      getEstimatedServerTimestamp(),
+      Date.now() - serverClockOffsetMs,
       Number.isNaN(currentControlledPosition) ? undefined : currentControlledPosition
     );
 
@@ -694,17 +695,13 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   }
 
   function updateControlledPositionFromPointer(event: PointerEvent, forceSend = false): void {
-    const position = getPositionFromPointer(event);
+    const position = getPositionFromClientPoint(event.clientX, event.clientY);
 
     if (activeDrag?.pointerId === event.pointerId) {
       activeDrag.latestPosition = position;
     }
 
     updatePlayerPosition(position, forceSend);
-  }
-
-  function getPositionFromPointer(event: PointerEvent): number {
-    return getPositionFromClientPoint(event.clientX, event.clientY);
   }
 
   function handleDragTouchMove(event: TouchEvent): void {
@@ -732,15 +729,11 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     return isTeam2View ? -position : position;
   }
 
-  function getEstimatedServerTimestamp(): number {
-    return Date.now() - serverClockOffsetMs;
-  }
-
   function renderCheerCounts(): void {
-    cheerCounts.innerHTML = `
-      <span class="cheer-badge cheer-team1"><span class="emoji">📣</span><span class="count">${team1CheerCount}</span></span>
-      <span class="cheer-badge cheer-team2"><span class="emoji">🥁</span><span class="count">${team2CheerCount}</span></span>
-    `;
+    cheerCounts.replaceChildren(
+      createCheerBadge("cheer-team1", "\u{1F4E3}", team1CheerCount),
+      createCheerBadge("cheer-team2", "\u{1F941}", team2CheerCount)
+    );
   }
 
   function playCheerBurst(team: FoosballTeam): void {
@@ -836,6 +829,21 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
 
     ballAnimationFrame = requestAnimationFrame(renderBall);
   }
+}
+
+function createCheerBadge(teamClass: string, icon: string, count: number): HTMLSpanElement {
+  const badge = document.createElement("span");
+  const iconElement = document.createElement("span");
+  const countElement = document.createElement("span");
+
+  badge.classList.add("cheer-badge", teamClass);
+  iconElement.className = "emoji";
+  iconElement.textContent = icon;
+  countElement.className = "count";
+  countElement.textContent = String(count);
+  badge.append(iconElement, countElement);
+
+  return badge;
 }
 
 function createKickRequest(

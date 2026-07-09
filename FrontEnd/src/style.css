@@ -6,6 +6,7 @@
   --color-text: #1f2933;
   --color-muted: #667085;
   --color-border: #d8dde5;
+  --color-soft-surface: #f5f7fb;
   --color-primary: #1769aa;
   --color-primary-dark: #0f4f82;
   --color-ready: #1f7a4f;
@@ -19,15 +20,13 @@
   --space-8: 2rem;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
-  --font-size-body: 1rem;
-  --font-size-title: 2rem;
+  --radius-pill: 999rem;
   --font-size-section: 1.0625rem;
   --color-sky: #8fcdf7;
   --color-sky-light: #dff4ff;
   --color-sun: #ffd95a;
   --color-cloud: #ffffff;
   --color-card-border: #243452;
-  --color-card-shadow: rgba(31, 41, 51, 0.12);
   --color-button: #f7d45d;
   --color-button-hover: #efcb4e;
   --color-strip-yellow: #f7d45d;
@@ -38,7 +37,7 @@
   color: var(--color-text);
   background: var(--color-background);
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 16px;
+  font-size: 100%;
   line-height: 1.45;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -89,7 +88,7 @@ body::after {
   left: 8vw;
   width: 12rem;
   aspect-ratio: 3 / 1;
-  border-radius: 999rem;
+  border-radius: var(--radius-pill);
   background: var(--color-cloud);
   box-shadow: 2.5rem -1rem 0 var(--color-cloud), 5rem 0 0 var(--color-cloud);
 }
@@ -229,7 +228,7 @@ h2 {
   padding: 0.75rem 1rem;
   border: 0.18rem solid var(--color-border);
   border-radius: 0.75rem;
-  background: #f5f7fb;
+  background: var(--color-soft-surface);
   color: var(--color-text);
   font-weight: 600;
 }
@@ -300,6 +299,16 @@ h2 {
 .status-message {
   color: var(--color-muted);
 }
+.home-intro {
+  margin-bottom: 0.75rem;
+  padding: 0.85rem 0.95rem;
+  border: 0.12rem solid var(--color-border);
+  border-radius: 0.75rem;
+  background: #f8fbff;
+  color: var(--color-muted);
+  font-size: 0.94rem;
+  line-height: 1.45;
+}
 
 .status-message:empty {
   display: none;
@@ -331,7 +340,7 @@ h2 {
   right: var(--space-3);
   width: 2rem;
   height: 2rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-muted);
   cursor: pointer;
@@ -474,10 +483,6 @@ h2 {
 @media (min-width: 40rem) {
   .page {
     padding: var(--space-8) var(--space-6);
-  }
-
-  .main-actions {
-    grid-template-columns: 1fr 1fr;
   }
 
   .team-grid {

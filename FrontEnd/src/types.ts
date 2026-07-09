@@ -55,7 +55,7 @@ export type Lobby = {
   code: string;
   players: Player[];
   score: Score;
-  hostId: string;
+  hostId: string | null;
   captains: Captains;
   teamNames: TeamNames;
   settings: GameSettings;
@@ -118,14 +118,8 @@ export type LobbyRequest = {
   joinChoice: JoinChoice;
 };
 
-export type ScoreUpdateRequest = {
-  team?: "team1" | "team2";
-  action?: "reset";
-};
-
 export type LobbySettingsUpdateRequest = {
   playerId: string;
-  captains?: Partial<Captains>;
   teamNames?: Partial<TeamNames>;
   settings?: Partial<GameSettings>;
 };
@@ -133,3 +127,7 @@ export type LobbySettingsUpdateRequest = {
 export type HomeViewJoinData = LobbyRequest & {
   lobbyCode: string;
 };
+
+export function getActivePlayers(players: Player[]): Player[] {
+  return players.filter((player) => player.joinChoice === "player").slice(0, 20);
+}

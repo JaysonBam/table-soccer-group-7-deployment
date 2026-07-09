@@ -1,5 +1,6 @@
 import { updateLobbySettings } from "../api";
-import type { ClientPerson, Lobby, PersonType, Player } from "../types";
+import { getActivePlayers } from "../types";
+import type { ClientPerson, Lobby, PersonType } from "../types";
 
 type WaitingRoomHandlers = {
   onStart: () => void;
@@ -22,11 +23,8 @@ export function createWaitingRoomView(
   const lobbyCode = screen.querySelector<HTMLParagraphElement>("[data-lobby-code]")!;
   const personType = screen.querySelector<HTMLParagraphElement>("[data-person-type]")!;
   const setupNotice = screen.querySelector<HTMLParagraphElement>("[data-setup-notice]")!;
-  const captainFields = screen.querySelector<HTMLElement>("[data-captain-fields]")!;
   const teamNameFields = screen.querySelector<HTMLElement>("[data-team-name-fields]")!;
   const matchSettings = screen.querySelector<HTMLElement>("[data-match-settings]")!;
-  const team1CaptainSelect = screen.querySelector<HTMLSelectElement>("[data-team1-captain]")!;
-  const team2CaptainSelect = screen.querySelector<HTMLSelectElement>("[data-team2-captain]")!;
   const team1NameField = screen.querySelector<HTMLLabelElement>("[data-team1-name-field]")!;
   const team2NameField = screen.querySelector<HTMLLabelElement>("[data-team2-name-field]")!;
   const team1NameInput = screen.querySelector<HTMLInputElement>("[data-team1-name]")!;
@@ -34,7 +32,6 @@ export function createWaitingRoomView(
   const winModeSelect = screen.querySelector<HTMLSelectElement>("[data-win-mode]")!;
   const winTargetInput = screen.querySelector<HTMLInputElement>("[data-win-target]")!;
   const timerMinutesInput = screen.querySelector<HTMLInputElement>("[data-timer-minutes]")!;
-  const timerSecondsInput = screen.querySelector<HTMLInputElement>("[data-timer-seconds]")!;
   const readyButton = screen.querySelector<HTMLButtonElement>("[data-ready-button]")!;
   const readyStatus = screen.querySelector<HTMLParagraphElement>("[data-ready-status]")!;
   const spectatorStatus = screen.querySelector<HTMLParagraphElement>("[data-spectator-status]")!;
@@ -96,19 +93,6 @@ export function createWaitingRoomView(
     });
   });
 
-  timerSecondsInput.addEventListener("change", () => {
-    const minutes = Math.floor(currentLobby!.settings.timerSeconds / 60);
-    const seconds = clampNumber(Number(timerSecondsInput.value) || 0, 0, 59);
-
-    timerSecondsInput.value = String(seconds);
-    void updateLobbySettings(currentLobby!.code, {
-      playerId: currentPerson!.id,
-      settings: {
-        timerSeconds: minutes * 60 + seconds
-      }
-    });
-  });
-
   readyButton.addEventListener("click", handlers.onStart);
 
   return {
@@ -123,6 +107,7 @@ export function createWaitingRoomView(
     const startStatus = getStartStatus(lobby);
     const remainingReadyPlayers = getRemainingReadyPlayers(lobby);
     const isReady = isPersonReady(lobby, person);
+    const people = createDisplayPeople(lobby);
 
     currentLobby = lobby;
     currentPerson = person;
@@ -130,17 +115,13 @@ export function createWaitingRoomView(
     personType.textContent = `You are: ${getPersonTypeLabel(person.type)}`;
     statusMessage.textContent = message;
 
-    populateCaptainSelect(team1CaptainSelect, lobby.players, lobby.captains.team1);
-    populateCaptainSelect(team2CaptainSelect, lobby.players, lobby.captains.team2);
     team1NameInput.value = lobby.teamNames.team1;
     team2NameInput.value = lobby.teamNames.team2;
     winModeSelect.value = lobby.settings.mode;
     winTargetInput.value = String(lobby.settings.winTarget);
     winTargetInput.max = lobby.settings.mode === "suddenDeath" ? "1" : "9";
     timerMinutesInput.value = String(Math.max(1, Math.round(lobby.settings.timerSeconds / 60)));
-    timerSecondsInput.value = String(lobby.settings.timerSeconds % 60);
 
-    captainFields.hidden = true;
     teamNameFields.hidden = !canEditTeamNames;
     matchSettings.hidden = !isHost;
     team1NameField.hidden = !isTeam1Captain;
@@ -148,9 +129,9 @@ export function createWaitingRoomView(
     setupNotice.hidden = canEditTeamNames;
     setupNotice.textContent = "Only captains can change team names.";
 
-    populatePeopleList(screen, "team1Player", lobby, person);
-    populatePeopleList(screen, "team2Player", lobby, person);
-    populatePeopleList(screen, "spectator", lobby, person);
+    populatePeopleList(screen, "team1Player", people);
+    populatePeopleList(screen, "team2Player", people);
+    populatePeopleList(screen, "spectator", people);
 
     if (person.type === "spectator") {
       readyButton.hidden = true;
@@ -168,41 +149,17 @@ export function createWaitingRoomView(
   }
 }
 
-function populateCaptainSelect(
-  select: HTMLSelectElement,
-  players: Player[],
-  currentValue: string | null
-): void {
-  const emptyOption = document.createElement("option");
-  const options = [emptyOption];
-
-  emptyOption.value = "";
-  emptyOption.textContent = "No captain";
-
-  for (const player of players) {
-    const option = document.createElement("option");
-
-    option.value = player.id;
-    option.textContent = player.name;
-    option.selected = player.id === currentValue;
-    options.push(option);
-  }
-
-  select.replaceChildren(...options);
-}
-
 function populatePeopleList(
   screen: HTMLElement,
   type: PersonType,
-  lobby: Lobby,
-  clientPerson: ClientPerson
+  people: DisplayPerson[]
 ): void {
   const list = screen.querySelector<HTMLUListElement>(`[data-people-list="${type}"]`)!;
-  const people = createDisplayPeople(lobby, clientPerson).filter((person) => person.type === type);
+  const matchingPeople = people.filter((person) => person.type === type);
 
   list.replaceChildren();
 
-  if (people.length === 0) {
+  if (matchingPeople.length === 0) {
     const emptyItem = document.createElement("li");
 
     emptyItem.className = "empty";
@@ -211,7 +168,7 @@ function populatePeopleList(
     return;
   }
 
-  for (const person of people) {
+  for (const person of matchingPeople) {
     list.append(createPersonListItem(person));
   }
 }
@@ -224,7 +181,6 @@ function createPersonListItem(person: DisplayPerson): HTMLLIElement {
 
   item.className = "person-item";
   name.textContent = person.name;
-  captainBadge.className = "captain-pill";
   captainBadge.textContent = "Captain";
   captainBadge.hidden = !person.isCaptain;
   readyPill.className = "ready-pill";
@@ -240,14 +196,13 @@ function createPersonListItem(person: DisplayPerson): HTMLLIElement {
   return item;
 }
 
-function createDisplayPeople(lobby: Lobby, clientPerson: ClientPerson): DisplayPerson[] {
+function createDisplayPeople(lobby: Lobby): DisplayPerson[] {
+  const activePlayerIds = new Set(getActivePlayers(lobby.players).map((player) => player.id));
   let rosterIndex = 0;
 
   return lobby.players.map((player) => {
-    const isCurrentClient = player.id === clientPerson.id;
-    const isSpectator = isCurrentClient
-      ? clientPerson.type === "spectator"
-      : player.joinChoice === "spectator";
+    const isSpectator = !activePlayerIds.has(player.id);
+    const isCaptain = player.id === lobby.captains.team1 || player.id === lobby.captains.team2;
 
     if (isSpectator) {
       return {
@@ -255,13 +210,11 @@ function createDisplayPeople(lobby: Lobby, clientPerson: ClientPerson): DisplayP
         name: player.name,
         ready: player.ready,
         type: "spectator",
-        isCaptain: player.id === lobby.captains.team1 || player.id === lobby.captains.team2
+        isCaptain
       };
     }
 
-    const type: PersonType = isCurrentClient
-      ? clientPerson.type
-      : rosterIndex % 2 === 0 ? "team1Player" : "team2Player";
+    const type: PersonType = rosterIndex % 2 === 0 ? "team1Player" : "team2Player";
 
     rosterIndex += 1;
 
@@ -270,19 +223,13 @@ function createDisplayPeople(lobby: Lobby, clientPerson: ClientPerson): DisplayP
       name: player.name,
       ready: player.ready,
       type,
-      isCaptain: player.id === lobby.captains.team1 || player.id === lobby.captains.team2
+      isCaptain
     };
   });
 }
 
 function getStartStatus(lobby: Lobby): string | null {
   const activePlayers = getActivePlayers(lobby.players);
-  const maxGamePlayers = 20;
-
-  if (activePlayers.length > maxGamePlayers) {
-    return `Only ${maxGamePlayers} active players can play at once. Extra joined users should spectate.`;
-  }
-
   const missingPlayers = Math.max(MIN_GAME_PLAYERS - activePlayers.length, 0);
 
   if (missingPlayers === 0) {
@@ -332,8 +279,4 @@ function normalizeWinTarget(value: number): number {
   const clampedValue = clampNumber(value, 1, 9);
 
   return clampedValue % 2 === 0 ? clampedValue - 1 : clampedValue;
-}
-
-function getActivePlayers(players: Player[]): Player[] {
-  return players.filter((player) => player.joinChoice === "player");
 }

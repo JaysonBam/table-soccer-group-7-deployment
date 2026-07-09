@@ -2,8 +2,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LobbyService } from "../lobbies/lobbyService.ts";
-import type { LobbySettingsUpdateRequest, ScoreUpdateRequest } from "../shared/types.ts";
-import { TEAM_SIDES } from "../shared/types.ts";
+import type { LobbySettingsUpdateRequest } from "../shared/types.ts";
 import { AppError } from "../shared/errors.ts";
 import type { LobbySocketServer } from "../realtime/lobbySocketServer.ts";
 
@@ -62,8 +61,12 @@ export function createLobbyRouteHandler({ lobbyService, lobbySocketServer }: Lob
 
       if (request.method === "POST" && scoreCode) {
         const body = expectObject(await readJsonBody(request), "Score update body is required");
-        const lobby = updateLobbyScore(lobbyService, scoreCode, readScoreUpdateRequest(body));
 
+        if (body.action !== "reset") {
+          throw new AppError(400, "Scores are updated by gameplay goals");
+        }
+
+        const lobby = lobbyService.resetMatch(scoreCode);
         lobbySocketServer.broadcastLobby(lobby);
         sendJson(response, 200, lobby);
         return;
@@ -123,30 +126,13 @@ function readLobbyJoinRequest(body: Record<string, unknown>): { playerName: stri
   };
 }
 
-function updateLobbyScore(lobbyService: LobbyService, lobbyCode: string, request: ScoreUpdateRequest) {
-  if (request.action === "reset") {
-    return lobbyService.resetMatch(lobbyCode);
-  }
-
-  throw new AppError(400, "Scores are updated by gameplay goals");
-}
-
-function readScoreUpdateRequest(body: Record<string, unknown>): ScoreUpdateRequest {
-  return {
-    action: body.action === "reset" ? "reset" : undefined,
-    team: TEAM_SIDES.find((teamSide) => teamSide === body.team)
-  };
-}
-
 function readLobbySettingsUpdateRequest(body: Record<string, unknown>): LobbySettingsUpdateRequest {
   const playerId = readRequiredString(body.playerId, "playerId is required");
-  const captains = body.captains === undefined ? undefined : expectObject(body.captains, "Request field must be an object");
   const teamNames = body.teamNames === undefined ? undefined : expectObject(body.teamNames, "Request field must be an object");
   const settings = body.settings === undefined ? undefined : expectObject(body.settings, "Request field must be an object");
 
   return {
     playerId,
-    captains: captains as LobbySettingsUpdateRequest["captains"],
     teamNames: teamNames as LobbySettingsUpdateRequest["teamNames"],
     settings: settings as LobbySettingsUpdateRequest["settings"]
   };

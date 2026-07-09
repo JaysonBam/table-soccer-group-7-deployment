@@ -51,7 +51,7 @@ export function createLobbyService(): LobbyService {
       lastTouchPlayerId: null
     };
 
-    syncCaptains(lobby);
+    syncLobbyLeaders(lobby);
     lobbies.set(lobby.code, lobby);
     return lobby;
   }
@@ -68,14 +68,14 @@ export function createLobbyService(): LobbyService {
     }
 
     lobby.players.push(createPlayer(playerName, joinChoice));
-    syncCaptains(lobby);
+    syncLobbyLeaders(lobby);
     return lobby;
   }
 
   function getLobby(code: string): Lobby {
     const lobby = getStoredLobby(code);
 
-    syncCaptains(lobby);
+    syncLobbyLeaders(lobby);
     finishMatchIfExpired(lobby, Date.now());
     return lobby;
   }
@@ -133,11 +133,10 @@ export function createLobbyService(): LobbyService {
     lobby.assignments = undefined;
     lobby.playerStats = {};
     lobby.lastTouchPlayerId = null;
+    lobby.players = [];
+    lobby.hostId = null;
     lobbyLastCountedTouch.delete(code);
-
-    for (const player of lobby.players) {
-      player.ready = false;
-    }
+    syncLobbyLeaders(lobby);
 
     return lobby;
   }
@@ -152,10 +151,6 @@ export function createLobbyService(): LobbyService {
   function updateLobbySettings(code: string, update: LobbySettingsUpdateRequest): Lobby {
     const lobby = getLobby(code);
     const player = findPlayer(lobby, update.playerId);
-
-    if (update.captains) {
-      throw new AppError(403, "Captains are assigned automatically");
-    }
 
     if (update.settings && player.id !== lobby.hostId) {
       throw new AppError(403, "Only the host can update match rules");
@@ -229,7 +224,11 @@ function createActiveMatch(settings: GameSettings, now: number): MatchState {
   };
 }
 
-function syncCaptains(lobby: Lobby): void {
+function syncLobbyLeaders(lobby: Lobby): void {
+  if (!lobby.players.some((player) => player.id === lobby.hostId)) {
+    lobby.hostId = lobby.players[0]?.id ?? null;
+  }
+
   const players = lobby.players.filter((player) => player.joinChoice !== "spectator");
   const nextCaptains: Captains = {
     team1: players[0]?.id ?? null,
@@ -300,9 +299,9 @@ function recordGoalStats(lobby: Lobby, scoringTeam: TeamSide): void {
   }
 
   const assignment = lobby.assignments?.find((entry) => entry.id === playerId);
+  lobby.lastTouchPlayerId = null;
 
   if (!assignment) {
-    lobby.lastTouchPlayerId = null;
     return;
   }
 
@@ -311,13 +310,11 @@ function recordGoalStats(lobby: Lobby, scoringTeam: TeamSide): void {
   if (getTeamSide(assignment.team) === scoringTeam) {
     stats.goals += 1;
     stats.points += 5;
-    lobby.lastTouchPlayerId = null;
     return;
   }
 
   stats.ownGoals += 1;
   stats.points -= 5;
-  lobby.lastTouchPlayerId = null;
 }
 
 function getStats(lobby: Lobby, playerId: string): PlayerStats {
@@ -364,10 +361,8 @@ function getScoreLeader(lobby: Lobby): TeamSide | null {
 function isReadyToStart(lobby: Lobby): boolean {
   const activePlayers = getActivePlayers(lobby.players);
   const minimumReadyPlayers = Math.ceil(activePlayers.length * 0.5);
-  const maximumActivePlayers = TEAM_PLAYER_LIMIT.max * 2;
 
   return activePlayers.length >= TEAM_PLAYER_LIMIT.min * 2
-    && activePlayers.length <= maximumActivePlayers
     && activePlayers.filter((player) => player.ready).length >= minimumReadyPlayers;
 }
 
@@ -398,35 +393,6 @@ function findPlayer(lobby: Lobby, playerId: string): Player {
   }
 
   return player;
-}
-
-function getUpdatedCaptains(lobby: Lobby, captains: Partial<Captains>): Captains {
-  const nextCaptains: Captains = {
-    team1: normalizeCaptainId(lobby, captains.team1, lobby.captains.team1),
-    team2: normalizeCaptainId(lobby, captains.team2, lobby.captains.team2)
-  };
-
-  if (nextCaptains.team1 && nextCaptains.team1 === nextCaptains.team2) {
-    throw new AppError(400, "A player cannot captain both teams");
-  }
-
-  return nextCaptains;
-}
-
-function normalizeCaptainId(lobby: Lobby, nextValue: string | null | undefined, currentValue: string | null): string | null {
-  if (nextValue === undefined) {
-    return currentValue;
-  }
-
-  if (nextValue === null || nextValue === "") {
-    return null;
-  }
-
-  if (!lobby.players.some((player) => player.id === nextValue)) {
-    throw new AppError(400, "Captain must be a player in the lobby");
-  }
-
-  return nextValue;
 }
 
 function getUpdatedSettings(currentSettings: GameSettings, settings: Partial<GameSettings>): GameSettings {

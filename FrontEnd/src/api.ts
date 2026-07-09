@@ -1,5 +1,5 @@
 import { API_URL, FALLBACK_API_URL } from "./config";
-import type { Lobby, LobbyRequest, LobbySettingsUpdateRequest, ScoreUpdateRequest } from "./types";
+import type { Lobby, LobbyRequest, LobbySettingsUpdateRequest } from "./types";
 
 export async function createLobby(request: LobbyRequest): Promise<Lobby> {
   return postLobby("/lobbies", request);
@@ -7,14 +7,6 @@ export async function createLobby(request: LobbyRequest): Promise<Lobby> {
 
 export async function joinLobby(lobbyCode: string, request: LobbyRequest): Promise<Lobby> {
   return postLobby(`/lobbies/${lobbyCode}/join`, request);
-}
-
-export async function getLobby(lobbyCode: string): Promise<Lobby> {
-  return requestLobby(`/lobbies/${lobbyCode}`);
-}
-
-export async function updateLobbyScore(lobbyCode: string, request: ScoreUpdateRequest): Promise<Lobby> {
-  return requestLobby(`/lobbies/${lobbyCode}/score`, request);
 }
 
 export async function updateLobbySettings(lobbyCode: string, request: LobbySettingsUpdateRequest): Promise<Lobby> {
