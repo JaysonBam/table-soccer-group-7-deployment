@@ -20,7 +20,6 @@ import type {
 } from "./types";
 
 const LOBBY_ROUTE = "lobby";
-const READY_RETRY_INTERVAL_MS = 1500;
 type ScreenName = "pitch" | "lobby" | "waiting";
 
 let currentLobby: Lobby | null = null;
@@ -36,8 +35,6 @@ let updateGameBallState: ((ballState: BallMovementState) => void) | null = null;
 let updateGameLobby: ((lobby: Lobby) => void) | null = null;
 let updateGameGoal: ((scoringTeam: TeamSide) => void) | null = null;
 let socketReconnectHandle: number | undefined;
-let readyRequestPending = false;
-let readyRetryHandle: number | undefined;
 
 const app = document.querySelector<HTMLElement>("#app")!;
 const pitchScreen = app.querySelector<HTMLElement>("#pitch-screen")!;
@@ -72,7 +69,6 @@ function showPitchPreview(): void {
   currentView = "preview";
   currentLobby = null;
   currentPerson = null;
-  clearReadyRequest();
   currentPositions = {};
   currentBallState = null;
   closeLobbySocket();
@@ -88,7 +84,6 @@ function showHomeView(message = ""): void {
   currentView = "home";
   currentLobby = null;
   currentPerson = null;
-  clearReadyRequest();
   currentPositions = {};
   currentBallState = null;
   closeLobbySocket();
@@ -179,7 +174,6 @@ async function handleJoinLobby(data: HomeViewJoinData): Promise<void> {
 function enterLobby(lobby: Lobby, data: LobbyRequest): void {
   currentLobby = lobby;
   currentPerson = createClientPerson(lobby, data.personName, data.joinChoice);
-  clearReadyRequest();
   currentPositions = {};
   currentBallState = null;
   connectCurrentLobbySocket();
@@ -193,10 +187,19 @@ function handleReady(): void {
     return;
   }
 
-  readyRequestPending = true;
+  const readyPersonId = currentPerson.id;
+
+  currentPerson = {
+    ...currentPerson,
+    ready: true
+  };
+  currentLobby = {
+    ...currentLobby,
+    players: currentLobby.players.map((player) => player.id === readyPersonId ? { ...player, ready: true } : player)
+  };
   saveStoredClientName(currentPerson.name);
-  renderCurrentWaitingRoom("Marking you ready...");
-  sendPendingReady();
+  renderCurrentWaitingRoom();
+  currentLobbySocket?.markReady();
 }
 
 function connectCurrentLobbySocket(): void {
@@ -215,9 +218,6 @@ function connectCurrentLobbySocket(): void {
     onGoal: handleSocketGoal,
     onError: handleSocketError
   });
-  if (readyRequestPending) {
-    sendPendingReady();
-  }
   clearSocketReconnect();
 }
 
@@ -236,8 +236,6 @@ function handleSocketLobby(lobby: Lobby): void {
   syncCurrentPersonReadyState();
 
   if (canGameStart(lobby)) {
-    clearReadyRequest();
-
     if (currentView !== "game") {
       showGamePage();
     } else {
@@ -356,35 +354,6 @@ function clearSocketReconnect(): void {
   socketReconnectHandle = undefined;
 }
 
-function sendPendingReady(): void {
-  if (!readyRequestPending) {
-    return;
-  }
-
-  currentLobbySocket?.markReady();
-  scheduleReadyRetry();
-}
-
-function scheduleReadyRetry(): void {
-  if (readyRetryHandle !== undefined || !readyRequestPending || currentView !== "waiting") {
-    return;
-  }
-
-  readyRetryHandle = window.setTimeout(() => {
-    readyRetryHandle = undefined;
-    sendPendingReady();
-  }, READY_RETRY_INTERVAL_MS);
-}
-
-function clearReadyRequest(): void {
-  readyRequestPending = false;
-
-  if (readyRetryHandle !== undefined) {
-    window.clearTimeout(readyRetryHandle);
-    readyRetryHandle = undefined;
-  }
-}
-
 function createClientPerson(lobby: Lobby, name: string, joinChoice: JoinChoice): ClientPerson {
   const player = [...lobby.players].reverse().find((currentPlayer) => currentPlayer.name === name)!;
 
@@ -456,10 +425,6 @@ function syncCurrentPersonReadyState(): void {
     ready: matchingPlayer.ready,
     type: getPersonType(currentLobby, currentPersonId, currentPerson.joinChoice)
   };
-
-  if (matchingPlayer.ready) {
-    clearReadyRequest();
-  }
 }
 
 function hasCurrentPersonBeenRemoved(lobby: Lobby): boolean {

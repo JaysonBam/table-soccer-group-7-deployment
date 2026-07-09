@@ -481,7 +481,7 @@
   left: var(--player-y);
   width: clamp(16px, 2.5vw, 25px);
   border-width: 2px;
-  transition: top 450ms linear;
+  transition: top 80ms linear;
 }
 
 .pitch-page .gameplay-player.team1Player {
@@ -501,7 +501,6 @@
     0 0 0 3px rgba(255, 255, 255, 0.88),
     0 0 0 6px rgba(34, 197, 94, 0.68),
     0 8px 18px rgba(0, 0, 0, 0.38);
-  transition-duration: 80ms;
 }
 
 .pitch-page .gameplay-player.is-current,

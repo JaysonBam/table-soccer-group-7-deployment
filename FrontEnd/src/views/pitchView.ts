@@ -62,7 +62,7 @@ const CHEER_BURST_DURATION_MS = 900;
 const GOAL_ANNOUNCEMENT_DURATION_MS = 3000;
 const KICKOFF_COUNTDOWN_MS = 3000;
 const MIN_KICK_SWIPE_DISTANCE = 24;
-const POSITION_SEND_INTERVAL_MS = 500;
+const POSITION_SEND_INTERVAL_MS = 50;
 const POSITION_SEND_EPSILON = 0.015;
 const GYRO_RENDER_EASE = 0.25;
 
@@ -103,7 +103,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   let serverClockOffsetMs = 0;
   let currentControlledPosition = Number.NaN;
   let lastSentPosition = Number.NaN;
-  let lastSentAt = -POSITION_SEND_INTERVAL_MS;
+  let lastSentAt = 0;
   let gyroTargetPosition = Number.NaN;
   let gyroRenderFrame = 0;
   let team1ScoreValue = handlers.lobby?.score.team1 ?? 0;
@@ -1141,3 +1141,4 @@ function getRoleLabel(role: FoosballRole): string {
 
   return "Attacker";
 }
+
