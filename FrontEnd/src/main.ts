@@ -1,5 +1,5 @@
 import "./style.css";
-import { createLobby, joinLobby, returnLobbyToWaitingRoom } from "./api";
+import { createLobby, joinLobby } from "./api";
 import { connectLobbySocket, type LobbySocketConnection } from "./lobbySocket";
 import { saveStoredClientName } from "./storage";
 import { getActivePlayers } from "./types";
@@ -144,8 +144,7 @@ function showGamePage(): void {
     onGoalUpdater: (updater) => {
       updateGameGoal = updater;
     },
-    onLeaveLobby: () => showHomeView("You left the lobby."),
-    onBackToWaitingRoom: handleBackToWaitingRoom
+    onLeaveLobby: () => showHomeView("You left the lobby.")
   });
 }
 
@@ -230,7 +229,7 @@ function handleSocketLobby(lobby: Lobby): void {
   currentLobby = lobby;
 
   if (hasCurrentPersonBeenRemoved(lobby)) {
-    showHomeView(`Match reset. Rejoin lobby ${lobby.code} to play again.`);
+    showHomeView("You left the lobby.");
     return;
   }
 
@@ -317,34 +316,6 @@ function handleLocalPositionChange(position: number): void {
     [currentPerson.id]: position
   };
   currentLobbySocket?.sendPosition(position);
-}
-
-async function handleBackToWaitingRoom(): Promise<void> {
-  if (!currentLobby || !currentPerson) {
-    showHomeView("Lobby data was missing");
-    return;
-  }
-
-  try {
-    const lobby = await returnLobbyToWaitingRoom(currentLobby.code, currentPerson.id);
-
-    currentLobby = lobby;
-
-    if (hasCurrentPersonBeenRemoved(lobby)) {
-      showHomeView(`Match reset. Rejoin lobby ${lobby.code} to play again.`);
-      return;
-    }
-
-    currentPerson = {
-      ...currentPerson,
-      ready: false
-    };
-    currentPositions = {};
-    currentBallState = null;
-    showWaitingRoom();
-  } catch (error) {
-    handleSocketError(getErrorMessage(error));
-  }
 }
 
 function handleSocketError(message: string): void {

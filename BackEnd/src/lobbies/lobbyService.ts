@@ -14,7 +14,6 @@ export type LobbyService = {
   recordBallTouch: (code: string, playerId: string, touchedAt?: number) => Lobby;
   recordGoal: (code: string, team: TeamSide, scoredAt?: number) => Lobby;
   resetMatch: (code: string) => Lobby;
-  returnToWaitingRoom: (code: string, playerId: string) => Lobby;
   finishExpiredMatch: (code: string, now?: number) => Lobby;
   updateLobbySettings: (code: string, update: LobbySettingsUpdateRequest) => Lobby;
   markPlayerReady: (code: string, playerId: string) => Lobby;
@@ -31,7 +30,6 @@ export function createLobbyService(): LobbyService {
     recordBallTouch,
     recordGoal,
     resetMatch,
-    returnToWaitingRoom,
     finishExpiredMatch,
     updateLobbySettings,
     markPlayerReady
@@ -115,28 +113,6 @@ export function createLobbyService(): LobbyService {
       lobbyLastCountedTouch.delete(code);
       lobby.match = createActiveMatch(lobby.settings, Date.now());
     }
-
-    return lobby;
-  }
-
-  function returnToWaitingRoom(code: string, playerId: string): Lobby {
-    const lobby = getLobby(code);
-
-    findPlayer(lobby, playerId);
-
-    if (lobby.match?.status !== "finished") {
-      throw new AppError(400, "Match must be finished before returning to the waiting room");
-    }
-
-    lobby.score = { ...EMPTY_SCORE };
-    lobby.match = undefined;
-    lobby.assignments = undefined;
-    lobby.playerStats = {};
-    lobby.lastTouchPlayerId = null;
-    lobby.players = [];
-    lobby.hostId = null;
-    lobbyLastCountedTouch.delete(code);
-    syncLobbyLeaders(lobby);
 
     return lobby;
   }

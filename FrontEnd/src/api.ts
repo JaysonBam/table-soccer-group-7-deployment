@@ -13,10 +13,6 @@ export async function updateLobbySettings(lobbyCode: string, request: LobbySetti
   return requestLobby(`/lobbies/${lobbyCode}/settings`, request);
 }
 
-export async function returnLobbyToWaitingRoom(lobbyCode: string, playerId: string): Promise<Lobby> {
-  return requestLobby(`/lobbies/${lobbyCode}/waiting-room`, { playerId });
-}
-
 async function postLobby(path: string, body: LobbyRequest): Promise<Lobby> {
   return requestLobby(path, { playerName: body.personName, joinChoice: body.joinChoice });
 }

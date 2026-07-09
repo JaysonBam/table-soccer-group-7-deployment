@@ -83,18 +83,6 @@ export function createLobbyRouteHandler({ lobbyService, lobbySocketServer }: Lob
         return;
       }
 
-      const waitingRoomCode = matchLobbyCode(request.url, /^\/lobbies\/([A-Z0-9]{6})\/waiting-room$/);
-
-      if (request.method === "POST" && waitingRoomCode) {
-        const body = expectObject(await readJsonBody(request), "Waiting room request body is required");
-        const playerId = readRequiredString(body.playerId, "playerId is required");
-        const lobby = lobbyService.returnToWaitingRoom(waitingRoomCode, playerId);
-
-        lobbySocketServer.broadcastLobby(lobby);
-        sendJson(response, 200, lobby);
-        return;
-      }
-
       sendJson(response, 404, { error: "Route not found" });
     } catch (error) {
       if (error instanceof AppError) {

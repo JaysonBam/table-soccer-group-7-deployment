@@ -29,7 +29,6 @@ type PitchViewHandlers = {
   onGoalUpdater?: (updater: ((scoringTeam: TeamSide) => void) | null) => void;
   onOpenLobby?: () => void;
   onLeaveLobby?: () => void;
-  onBackToWaitingRoom?: () => void | Promise<void>;
 };
 
 type PlayerMarkerState = {
@@ -120,7 +119,6 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   let goalFlashTimeout: number | undefined;
   let kickoffCountdownInterval: number | undefined;
   let gameOverModal: HTMLDivElement | null = null;
-  let backToWaitingClicked = false;
   const isSpectator = handlers.currentPerson?.type === "spectator";
   const isTeam2View = handlers.currentPerson?.type === "team2Player";
 
@@ -279,8 +277,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     const pointsList = document.createElement("ol");
     const leaders = document.createElement("section");
     const actions = document.createElement("p");
-    const leaveButton = document.createElement("button");
-    const waitingButton = document.createElement("button");
+    const homeButton = document.createElement("button");
 
     card.className = "game-over-card";
     title.textContent = "Game Over";
@@ -315,25 +312,11 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
       createLeaderItem("Own goals", getStatLeaders(rankedRows, "ownGoals"))
     );
     actions.className = "game-over-actions";
-    leaveButton.className = "button secondary";
-    leaveButton.type = "button";
-    leaveButton.textContent = "Leave Lobby";
-    leaveButton.addEventListener("click", () => handlers.onLeaveLobby?.(), { signal: listenerController.signal });
-    waitingButton.className = "button primary";
-    waitingButton.type = "button";
-    waitingButton.textContent = backToWaitingClicked ? "Returning..." : "Back to Waiting Room";
-    waitingButton.disabled = backToWaitingClicked;
-    waitingButton.addEventListener("click", () => {
-      if (backToWaitingClicked) {
-        return;
-      }
-
-      backToWaitingClicked = true;
-      waitingButton.textContent = "Returning...";
-      waitingButton.disabled = true;
-      void handlers.onBackToWaitingRoom?.();
-    }, { signal: listenerController.signal });
-    actions.append(leaveButton, waitingButton);
+    homeButton.className = "button primary";
+    homeButton.type = "button";
+    homeButton.textContent = "Home";
+    homeButton.addEventListener("click", () => handlers.onLeaveLobby?.(), { signal: listenerController.signal });
+    actions.append(homeButton);
     card.append(title, finalScore, mvpSummary, pointsList, leaders, legend, actions);
     overlay.replaceChildren(card);
   }
