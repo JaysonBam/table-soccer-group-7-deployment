@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { assignSoccerTeams } from "../gameplay/assignSoccerTeams.ts";
-import { DEFAULT_GAME_SETTINGS, DEFAULT_TEAM_NAMES, EMPTY_CAPTAINS, EMPTY_SCORE, MAX_LOBBY_PLAYERS, TEAM_PLAYER_LIMIT } from "../shared/constants.ts";
+import { DEFAULT_GAME_SETTINGS, DEFAULT_TEAM_NAMES, EMPTY_CAPTAINS, EMPTY_SCORE, MAX_ACTIVE_PLAYERS, TEAM_PLAYER_LIMIT } from "../shared/constants.ts";
 import type { AssignedPlayer, Captains, GameSettings, JoinChoice, Lobby, LobbySettingsUpdateRequest, MatchFinishReason, MatchState, Player, PlayerStats, PlayerTeam, TeamNames, TeamSide } from "../shared/types.ts";
 import { getActivePlayers, TEAM_CONFIG, TEAM_SIDES } from "../shared/types.ts";
 import { AppError } from "../shared/errors.ts";
@@ -63,8 +63,8 @@ export function createLobbyService(): LobbyService {
       throw new AppError(409, "Game has already started");
     }
 
-    if (lobby.players.length >= MAX_LOBBY_PLAYERS) {
-      throw new AppError(409, "Lobby is full");
+    if (joinChoice === "player" && getActivePlayers(lobby.players).length >= MAX_ACTIVE_PLAYERS) {
+      throw new AppError(409, "Player limit reached");
     }
 
     lobby.players.push(createPlayer(playerName, joinChoice));

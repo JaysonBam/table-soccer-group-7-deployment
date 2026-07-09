@@ -21,9 +21,6 @@ import type {
 
 const LOBBY_ROUTE = "lobby";
 type ScreenName = "pitch" | "lobby" | "waiting";
-type ScreenOrientationWithLock = {
-  lock: (orientation: "portrait") => Promise<void>;
-};
 
 let currentLobby: Lobby | null = null;
 let currentPerson: ClientPerson | null = null;
@@ -58,31 +55,6 @@ const waitingRoomView = createWaitingRoomView(waitingScreen, {
 
 window.addEventListener("hashchange", showCurrentRoute);
 showCurrentRoute();
-attemptOrientationLock();
-
-async function attemptOrientationLock(): Promise<void> {
-  const overlay = document.querySelector<HTMLElement>("[data-orientation-overlay]")!;
-
-  function updateOverlay(): void {
-    const isPortrait = window.innerHeight >= window.innerWidth;
-    overlay.classList.toggle("is-visible", !isPortrait);
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", updateOverlay, { once: true });
-  } else {
-    updateOverlay();
-  }
-
-  const orientation = screen.orientation as Partial<ScreenOrientationWithLock> | undefined;
-
-  if (typeof orientation?.lock === "function") {
-    await orientation.lock("portrait").catch(() => undefined);
-  }
-
-  window.addEventListener("orientationchange", updateOverlay);
-  window.addEventListener("resize", updateOverlay);
-}
 
 function showCurrentRoute(): void {
   if (getCurrentRoute() === LOBBY_ROUTE) {

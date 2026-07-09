@@ -120,6 +120,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
   let goalFlashTimeout: number | undefined;
   let kickoffCountdownInterval: number | undefined;
   let gameOverModal: HTMLDivElement | null = null;
+  let backToWaitingClicked = false;
   const isSpectator = handlers.currentPerson?.type === "spectator";
   const isTeam2View = handlers.currentPerson?.type === "team2Player";
 
@@ -279,6 +280,7 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     const leaders = document.createElement("section");
     const actions = document.createElement("p");
     const leaveButton = document.createElement("button");
+    const waitingButton = document.createElement("button");
 
     card.className = "game-over-card";
     title.textContent = "Game Over";
@@ -317,7 +319,21 @@ export function renderPitchView(screen: HTMLElement, handlers: PitchViewHandlers
     leaveButton.type = "button";
     leaveButton.textContent = "Leave Lobby";
     leaveButton.addEventListener("click", () => handlers.onLeaveLobby?.(), { signal: listenerController.signal });
-      actions.append(leaveButton);
+    waitingButton.className = "button primary";
+    waitingButton.type = "button";
+    waitingButton.textContent = backToWaitingClicked ? "Returning..." : "Back to Waiting Room";
+    waitingButton.disabled = backToWaitingClicked;
+    waitingButton.addEventListener("click", () => {
+      if (backToWaitingClicked) {
+        return;
+      }
+
+      backToWaitingClicked = true;
+      waitingButton.textContent = "Returning...";
+      waitingButton.disabled = true;
+      void handlers.onBackToWaitingRoom?.();
+    }, { signal: listenerController.signal });
+    actions.append(leaveButton, waitingButton);
     card.append(title, finalScore, mvpSummary, pointsList, leaders, legend, actions);
     overlay.replaceChildren(card);
   }

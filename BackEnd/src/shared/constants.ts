@@ -9,7 +9,7 @@ export const TEAM_PLAYER_LIMIT = {
   min: 3,
   max: 20
 } as const;
-export const MAX_LOBBY_PLAYERS = TEAM_PLAYER_LIMIT.max * 2;
+export const MAX_ACTIVE_PLAYERS = TEAM_PLAYER_LIMIT.max * 2;
 
 export const DEFAULT_GAME_SETTINGS: GameSettings = {
   mode: "firstTo",
