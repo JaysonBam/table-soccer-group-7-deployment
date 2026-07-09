@@ -501,6 +501,81 @@ h2 {
   }
 }
 
+@media (min-width: 56rem) {
+  #lobby-screen.page-narrow {
+    width: min(calc(100% - 4rem), 64rem);
+    max-width: 64rem;
+    padding: var(--space-6);
+  }
+
+  #lobby-screen .lobby-card {
+    min-height: min(34rem, calc(100svh - 4rem));
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
+    grid-template-areas:
+      "header entry"
+      "intro entry"
+      "status status";
+    align-items: center;
+    gap: 1.25rem 2rem;
+    padding: 3.5rem 2rem 2rem;
+  }
+
+  #lobby-screen .lobby-card::before {
+    left: 2rem;
+    right: auto;
+    width: min(26rem, calc(100% - 4rem));
+    height: 1.15rem;
+  }
+
+  #lobby-screen .page-header {
+    grid-area: header;
+    align-self: end;
+    margin-bottom: 0;
+  }
+
+  #lobby-screen h1 {
+    max-width: 8.5ch;
+    font-size: clamp(4.75rem, 7vw, 6.75rem);
+    letter-spacing: 0;
+  }
+
+  #lobby-screen .home-intro {
+    grid-area: intro;
+    align-self: start;
+    max-width: 34rem;
+    margin-bottom: 0;
+    padding: 1.1rem 1.2rem;
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  #lobby-screen .form-stack,
+  #lobby-screen .main-actions {
+    grid-area: entry;
+    width: 100%;
+    max-width: 22rem;
+    justify-self: end;
+    align-self: center;
+    padding-left: 1.5rem;
+    border-left: 0.12rem solid var(--color-border);
+  }
+
+  #lobby-screen .field input {
+    min-height: 3.5rem;
+    font-size: 1.05rem;
+  }
+
+  #lobby-screen .button {
+    min-height: 3rem;
+    font-size: 1rem;
+  }
+
+  #lobby-screen .status-message {
+    grid-area: status;
+  }
+}
+
 @media (max-width: 30rem) {
   .page {
     padding: var(--space-3);
