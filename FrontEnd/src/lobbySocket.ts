@@ -86,7 +86,13 @@ export function connectLobbySocket(
 
   const sendMessage = (message: ClientSocketMessage): void => {
     if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(message));
+      try {
+        socket.send(JSON.stringify(message));
+      } catch {
+        pendingMessages.push(message);
+        handlers.onError("Lobby socket connection failed.");
+      }
+
       return;
     }
 
