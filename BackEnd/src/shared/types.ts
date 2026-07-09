@@ -124,5 +124,5 @@ export type BallMovementState = {
 };
 
 export function getActivePlayers(players: Player[]): Player[] {
-  return players.filter((player) => player.joinChoice === "player").slice(0, 20);
+  return players.filter((player) => player.joinChoice === "player").slice(0, 40);
 }
